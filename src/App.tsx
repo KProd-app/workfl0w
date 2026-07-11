@@ -1711,49 +1711,69 @@ export default function App() {
                             <div className="p-4 grid grid-cols-1 md:grid-cols-12 gap-4">
                               
                               {/* Left col: Customer & Products */}
-                              <div className="md:col-span-7 space-y-3 border-r md:border-r border-slate-100 pr-0 md:pr-4">
-                                <div>
-                                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Užsakovas</span>
-                                  <p className="font-semibold text-slate-800 text-sm">{order.customer_name}</p>
-                                  <p className="text-xs text-slate-500">{order.customer_email}</p>
+                              <div className="md:col-span-8 space-y-3 border-r border-slate-100 pr-0 md:pr-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Užsakovas</span>
+                                    <p className="font-semibold text-slate-800 text-sm">{order.customer_name}</p>
+                                    <p className="text-xs text-slate-550 text-slate-500">{order.customer_email}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Pristatymo adresas</span>
+                                    <p className="text-xs text-slate-700 font-semibold mt-0.5">
+                                      {order.shipping_address?.city || ""}, {order.shipping_address?.address || order.shipping_address?.address1 || "Nenurodytas"}
+                                    </p>
+                                  </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                  <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Gamybos pozicijos</span>
-                                  {order.order_items.map(item => (
-                                    <div key={item.id} className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                                      <div className="flex justify-between text-xs">
-                                        <span className="font-semibold text-slate-800">{item.quantity}x {item.product_name}</span>
-                                        <span className="font-mono text-slate-500">{item.price.toFixed(2)} €</span>
-                                      </div>
-                                      <div className="flex justify-between items-center mt-1">
-                                        <span className="text-[10px] font-mono text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">SKU: {item.sku}</span>
-                                        {item.artwork_file_url ? (
-                                          <a 
-                                            href="#" 
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              alert(`Siunčiamas 300 DPI CMYK gamybinis failas:\n${item.artwork_file_url}`);
-                                            }}
-                                            className="text-[10px] text-emerald-600 hover:text-emerald-700 font-bold underline flex items-center gap-1 cursor-pointer"
-                                          >
-                                            <Printer className="w-3 h-3" />
-                                            DPI 300 CMYK failas
-                                          </a>
-                                        ) : (
-                                          <span className="text-[10px] text-amber-600 font-semibold flex items-center gap-1 bg-amber-50 px-1.5 py-0.5 rounded">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            Trūksta spaudos failo
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
+                                <div className="space-y-2 pt-2 border-t border-slate-50">
+                                  <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">Užsakytos prekės</span>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse text-xs">
+                                      <thead>
+                                        <tr className="border-b border-slate-100 text-slate-400 font-bold text-[9px] uppercase">
+                                          <th className="pb-1.5">Gaminys</th>
+                                          <th className="pb-1.5">SKU</th>
+                                          <th className="pb-1.5 text-center">Kiekis</th>
+                                          <th className="pb-1.5 text-right">Kaina</th>
+                                          <th className="pb-1.5 text-right pl-4">Maketas</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-50">
+                                        {order.order_items.map(item => (
+                                          <tr key={item.id} className="hover:bg-slate-50/50">
+                                            <td className="py-2 font-semibold text-slate-800">{item.product_name}</td>
+                                            <td className="py-2 font-mono text-[10px] text-indigo-600">{item.sku}</td>
+                                            <td className="py-2 text-center font-bold text-slate-700">{item.quantity}</td>
+                                            <td className="py-2 text-right font-mono text-slate-600">{item.price.toFixed(2)} €</td>
+                                            <td className="py-2 text-right pl-4">
+                                              {item.artwork_file_url ? (
+                                                <a 
+                                                  href={item.artwork_file_url}
+                                                  target="_blank"
+                                                  rel="noreferrer"
+                                                  className="inline-flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700 font-bold hover:underline"
+                                                >
+                                                  <Printer className="w-3.5 h-3.5" />
+                                                  Atsisiųsti
+                                                </a>
+                                              ) : (
+                                                <span className="inline-flex items-center gap-1 text-[9px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-bold">
+                                                  <AlertTriangle className="w-3 h-3" />
+                                                  Trūksta failo
+                                                </span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               </div>
 
                               {/* Right col: Financial summary & Operations */}
-                              <div className="md:col-span-5 flex flex-col justify-between space-y-4">
+                              <div className="md:col-span-4 flex flex-col justify-between space-y-4">
                                 <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
                                   <div>
                                     <span className="text-[10px] text-slate-400 block uppercase font-bold">Sumokėta</span>
