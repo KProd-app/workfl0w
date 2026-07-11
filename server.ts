@@ -84,6 +84,18 @@ const app = express();
     }
   }));
 
+  // Middleware to check if Supabase is properly initialized
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api") && req.path !== "/api/webhooks/shopify/simulate-webhook") {
+      if (!supabase) {
+        return res.status(500).json({
+          error: "Supabase client is not initialized. Please ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured in your Vercel Environment Variables, then Redeploy."
+        });
+      }
+    }
+    next();
+  });
+
   // ============================================================================
   // MODULE 1: SHOPIFY INTEGRACIJA IR WEBHOOK VALIDACIJA
   // Real implementation verifying X-Shopify-Hmac-SHA256
