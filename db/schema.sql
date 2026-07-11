@@ -16,6 +16,16 @@ CREATE TABLE IF NOT EXISTS stations (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 0.1.2. STATION BEDS TABLE
+CREATE TABLE IF NOT EXISTS station_beds (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  station_id UUID REFERENCES stations(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  width_mm INTEGER NOT NULL,
+  height_mm INTEGER NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 0.2. PRODUCT ROUTING RULES TABLE
 CREATE TABLE IF NOT EXISTS product_configs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,6 +33,8 @@ CREATE TABLE IF NOT EXISTS product_configs (
   sku_pattern VARCHAR(100) UNIQUE NOT NULL, -- e.g., 'CANVAS-*', 'POSTER-*'
   station_id UUID REFERENCES stations(id) ON DELETE CASCADE,
   artwork_generator_type VARCHAR(100) NOT NULL, -- e.g., 'standard_canvas', 'high_res_poster'
+  required_material_sku VARCHAR(100) REFERENCES inventory(sku) ON DELETE SET NULL,
+  material_qty_per_item DECIMAL(10, 2) DEFAULT 1.00,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

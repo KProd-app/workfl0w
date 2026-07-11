@@ -497,6 +497,20 @@ const app = express();
   }
 
   async function deductInventoryForItem(item: any) {
+    // Fetch product configs to check recipe
+    const { data: configs } = await supabase.from("product_configs").select("*");
+    let matchedConfig: any = null;
+    if (configs) {
+      for (const config of configs) {
+        const pattern = config.sku_pattern.replace(/\*/g, ".*");
+        const regex = new RegExp(`^${pattern}$`, "i");
+        if (regex.test(item.sku)) {
+          matchedConfig = config;
+          break;
+        }
+      }
+    }
+
     const { data: inventory, error: invError } = await supabase
       .from("inventory")
       .select("*");
@@ -508,7 +522,10 @@ const app = express();
     for (const material of inventory) {
       let deductAmount = 0;
       
-      if (material.sku === "CANVAS-MAT" && item.sku.includes("CANVAS")) {
+      if (matchedConfig && matchedConfig.required_material_sku === material.sku) {
+        const qtyPer = parseFloat(matchedConfig.material_qty_per_item || "1.00");
+        deductAmount = qtyPer * item.quantity;
+      } else if (material.sku === "CANVAS-MAT" && item.sku.includes("CANVAS")) {
         deductAmount = 2.4 * item.quantity;
       } else if (material.sku === "POSTER-MAT" && item.sku.includes("POSTER")) {
         deductAmount = 1.1 * item.quantity;
@@ -590,11 +607,18 @@ const app = express();
   });
 
   app.post("/api/products/configs", async (req, res) => {
-    const { name, sku_pattern, station_id, artwork_generator_type } = req.body;
+    const { name, sku_pattern, station_id, artwork_generator_type, required_material_sku, material_qty_per_item } = req.body;
     try {
       const { data, error } = await supabase
         .from("product_configs")
-        .insert({ name, sku_pattern, station_id, artwork_generator_type })
+        .insert({ 
+          name, 
+          sku_pattern, 
+          station_id, 
+          artwork_generator_type,
+          required_material_sku,
+          material_qty_per_item: material_qty_per_item ? parseFloat(material_qty_per_item) : 1.00
+        })
         .select()
         .single();
 
@@ -602,6 +626,81 @@ const app = express();
       return res.json(data);
     } catch (err: any) {
       console.error("Failed to create product config:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Station beds endpoints
+  app.get("/api/stations/:id/beds", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { data, error } = await supabase
+        .from("station_beds")
+        .select("*")
+        .eq("station_id", id)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      return res.json(data || []);
+    } catch (err: any) {
+      console.error("Failed to fetch station beds:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/stations/:id/beds", async (req, res) => {
+    const { id } = req.params;
+    const { name, width_mm, height_mm } = req.body;
+    try {
+      const { data, error } = await supabase
+        .from("station_beds")
+        .insert({
+          station_id: id,
+          name,
+          width_mm: parseInt(width_mm),
+          height_mm: parseInt(height_mm)
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.json(data);
+    } catch (err: any) {
+      console.error("Failed to create station bed:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/beds/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { error } = await supabase
+        .from("station_beds")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      return res.json({ success: true });
+    } catch (err: any) {
+      console.error("Failed to delete bed:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Simulated printfile generation
+  app.post("/api/production/generate-printfile", async (req, res) => {
+    const { itemId, bedName } = req.body;
+    try {
+      const printfileUrl = `https://supabase-storage.printflow-erp.lt/printfiles/printfile_${itemId}_${encodeURIComponent(bedName.replace(/\s+/g, '_'))}.pdf`;
+      const { error } = await supabase
+        .from("order_items")
+        .update({ artwork_file_url: printfileUrl })
+        .eq("id", itemId);
+
+      if (error) throw error;
+      return res.json({ success: true, printfileUrl });
+    } catch (err: any) {
+      console.error("Failed to generate printfile:", err);
       return res.status(500).json({ error: err.message });
     }
   });
@@ -877,6 +976,7 @@ const app = express();
       console.log("Resetting database tables...");
 
       // Delete referencing rows first
+      await supabase.from("station_beds").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("raw_materials_usage_log").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("email_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("invoices").delete().neq("id", "00000000-0000-0000-0000-000000000000");
@@ -891,7 +991,8 @@ const app = express();
       const defaultStations = [
         { name: "Drobių stotelė", code: "CANVAS", description: "Drobių gamybos ir porėminimo stotelė" },
         { name: "Plakatų stotelė", code: "POSTER", description: "Didelio formato plakatų spaudos stotelė" },
-        { name: "Lipdukų stotelė", code: "STICKER", description: "Lipdukų pjaustymo ir pakavimo stotelė" }
+        { name: "Lipdukų stotelė", code: "STICKER", description: "Lipdukų pjaustymo ir pakavimo stotelė" },
+        { name: "UV Spausdintuvo stotelė", code: "UV_PRINTER", description: "Difuzorių ir UV gaminių spaudos stotelė" }
       ];
 
       const { data: stations, error: stationsError } = await supabase
@@ -904,12 +1005,22 @@ const app = express();
       const canvasStation = stations.find(s => s.code === "CANVAS");
       const posterStation = stations.find(s => s.code === "POSTER");
       const stickerStation = stations.find(s => s.code === "STICKER");
+      const uvStation = stations.find(s => s.code === "UV_PRINTER");
+
+      // Seed default beds for UV Printer
+      const defaultBeds = [
+        { station_id: uvStation?.id, name: "Mini FlatBed (335 × 90 mm)", width_mm: 335, height_mm: 90 },
+        { station_id: uvStation?.id, name: "Standart FlatBed (335 × 420 mm)", width_mm: 335, height_mm: 420 }
+      ];
+      const { error: bedsError } = await supabase.from("station_beds").insert(defaultBeds);
+      if (bedsError) throw bedsError;
 
       // Seed Product Configurations
       const defaultConfigs = [
         { name: "Premium drobės", sku_pattern: "CANVAS-*", station_id: canvasStation?.id, artwork_generator_type: "standard_canvas" },
         { name: "Plakatai", sku_pattern: "POSTER-*", station_id: posterStation?.id, artwork_generator_type: "high_res_poster" },
-        { name: "Lipdukai", sku_pattern: "STICKER-*", station_id: stickerStation?.id, artwork_generator_type: "custom_sticker" }
+        { name: "Lipdukai", sku_pattern: "STICKER-*", station_id: stickerStation?.id, artwork_generator_type: "custom_sticker" },
+        { name: "Difuzoriai", sku_pattern: "DIFFUSER-*", station_id: uvStation?.id, artwork_generator_type: "custom_sticker", required_material_sku: "DIFFUSER-BASE", material_qty_per_item: 1.00 }
       ];
 
       const { error: configsError } = await supabase
@@ -923,7 +1034,8 @@ const app = express();
         { material_name: "Premium Canvas Drobė", sku: "CANVAS-MAT", quantity_remaining: 124.5, unit: "m²", critical_threshold: 20.0, cost_per_unit: 12.00 },
         { material_name: "Satininis Plakatų Popierius", sku: "POSTER-MAT", quantity_remaining: 14.2, unit: "m²", critical_threshold: 15.0, cost_per_unit: 3.50 },
         { material_name: "Eco-Solvent CMYK rašalai", sku: "INK-CMYK", quantity_remaining: 840, unit: "ml", critical_threshold: 100.0, cost_per_unit: 0.15 },
-        { material_name: "Sustiprintos transportavimo tūtos", sku: "TUBE-PC", quantity_remaining: 8, unit: "vnt", critical_threshold: 10.0, cost_per_unit: 1.50 }
+        { material_name: "Sustiprintos transportavimo tūtos", sku: "TUBE-PC", quantity_remaining: 8, unit: "vnt", critical_threshold: 10.0, cost_per_unit: 1.50 },
+        { material_name: "Difuzoriaus Akrilo Bazė", sku: "DIFFUSER-BASE", quantity_remaining: 50.0, unit: "vnt", critical_threshold: 10.0, cost_per_unit: 4.50 }
       ];
 
       const { error: invError } = await supabase
@@ -1013,6 +1125,21 @@ const app = express();
       };
 
       await supabase.from("order_items").insert(item2);
+
+      const item2_diffuser = {
+        order_id: insertedOrder2.id,
+        shopify_line_item_id: "item-shopify-2-diff",
+        product_name: "Automobilio difuzorius Premium",
+        sku: "DIFFUSER-CAR-PREM",
+        quantity: 1,
+        price: 28.20,
+        artwork_file_url: "",
+        station_id: uvStation?.id,
+        status: "PENDING_ARTWORK",
+        created_at: new Date().toISOString()
+      };
+
+      await supabase.from("order_items").insert(item2_diffuser);
 
       // Order 3
       const order3 = {

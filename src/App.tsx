@@ -123,6 +123,16 @@ export default function App() {
   const [workerItems, setWorkerItems] = useState<any[]>([]);
   const [adminStationFilter, setAdminStationFilter] = useState<string>("ALL");
 
+  // Flatbeds & Diffuser states
+  const [stationBeds, setStationBeds] = useState<any[]>([]);
+  const [selectedBedId, setSelectedBedId] = useState<string>("");
+  const [activeWorkerTab, setActiveWorkerTab] = useState<"production" | "shipping">("production");
+  const [activeWorkerItemId, setActiveWorkerItemId] = useState<string | null>(null);
+  const [workerSteps, setWorkerSteps] = useState<{ [itemId: string]: number }>({});
+  const [generatingPrintfile, setGeneratingPrintfile] = useState(false);
+  const [expandedStationId, setExpandedStationId] = useState<string | null>(null);
+  const [expandedBedsList, setExpandedBedsList] = useState<any[]>([]);
+
   // Form states for creating stations and configs
   const [newStationName, setNewStationName] = useState("");
   const [newStationCode, setNewStationCode] = useState("");
@@ -131,6 +141,13 @@ export default function App() {
   const [newConfigSku, setNewConfigSku] = useState("");
   const [newConfigStationId, setNewConfigStationId] = useState("");
   const [newConfigArtType, setNewConfigArtType] = useState("standard_canvas");
+  const [newConfigMatSku, setNewConfigMatSku] = useState("");
+  const [newConfigMatQty, setNewConfigMatQty] = useState("1.00");
+
+  // Form states for beds
+  const [newBedName, setNewBedName] = useState("");
+  const [newBedWidth, setNewBedWidth] = useState("335");
+  const [newBedHeight, setNewBedHeight] = useState("90");
 
   // Status/Loader states
   const [loading, setLoading] = useState(true);
@@ -206,6 +223,16 @@ export default function App() {
     }
   };
 
+  const fetchStationBeds = async (stationId: string) => {
+    try {
+      const res = await fetch(`/api/stations/${stationId}/beds`);
+      const data = await res.json();
+      setStationBeds(data);
+    } catch (err) {
+      console.error("Failed to fetch station beds:", err);
+    }
+  };
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -213,6 +240,7 @@ export default function App() {
   useEffect(() => {
     if (userRole === "WORKER" && selectedStationId) {
       fetchWorkerItems(selectedStationId);
+      fetchStationBeds(selectedStationId);
     }
   }, [userRole, selectedStationId]);
 
@@ -315,7 +343,9 @@ export default function App() {
           name: newConfigName,
           sku_pattern: newConfigSku,
           station_id: newConfigStationId,
-          artwork_generator_type: newConfigArtType
+          artwork_generator_type: newConfigArtType,
+          required_material_sku: newConfigMatSku || null,
+          material_qty_per_item: parseFloat(newConfigMatQty) || 1.00
         })
       });
       const data = await res.json();
@@ -325,11 +355,29 @@ export default function App() {
         setNewConfigSku("");
         setNewConfigStationId("");
         setNewConfigArtType("standard_canvas");
+        setNewConfigMatSku("");
+        setNewConfigMatQty("1.00");
         fetch("/api/products/configs").then(r => r.json()).then(setProductConfigs);
       }
     } catch (err) {
       console.error(err);
       showNotification("error", "Nepavyko sukurti taisyklės.");
+    }
+  };
+
+  const handleToggleStationExpand = async (stationId: string) => {
+    if (expandedStationId === stationId) {
+      setExpandedStationId(null);
+      setExpandedBedsList([]);
+    } else {
+      setExpandedStationId(stationId);
+      try {
+        const res = await fetch(`/api/stations/${stationId}/beds`);
+        const data = await res.json();
+        setExpandedBedsList(data);
+      } catch (err) {
+        console.error(err);
+      }
     }
   };
 
@@ -711,6 +759,35 @@ export default function App() {
               <p className="text-xs text-white font-bold">{selectedStationName}</p>
               <p className="text-[10px] text-slate-400">Aktyvių užsakymų stotelėje: {workerItems.length}</p>
             </div>
+
+            <nav className="space-y-1">
+              <button
+                onClick={() => setActiveWorkerTab("production")}
+                className={`flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer w-full text-left ${
+                  activeWorkerTab === "production"
+                    ? "bg-slate-800 text-white font-bold"
+                    : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Layers className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>Gamybos eilė</span>
+              </button>
+
+              <button
+                onClick={() => setActiveWorkerTab("shipping")}
+                className={`flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer w-full text-left ${
+                  activeWorkerTab === "shipping"
+                    ? "bg-slate-800 text-white font-bold"
+                    : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Truck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Siuntimo langas</span>
+                <span className="ml-auto bg-emerald-600 text-white font-mono px-1.5 py-0.5 rounded text-[9px]">
+                  {orders.filter(o => o.status === "PRINTED_AND_PACKED").length}
+                </span>
+              </button>
+            </nav>
           </div>
 
           <div className="p-4 border-t border-slate-800">
@@ -727,11 +804,20 @@ export default function App() {
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden text-slate-800">
           <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6 shrink-0">
             <div>
-              <h1 className="text-sm font-bold text-slate-900">{selectedStationName} gamybos eilė</h1>
-              <p className="text-[10px] text-slate-500 mt-0.5">Nuskaitykite QR kodus arba keiskite būsenas</p>
+              <h1 className="text-sm font-bold text-slate-900">
+                {selectedStationName} {activeWorkerTab === "production" ? "gamybos eilė" : "siuntimo langas"}
+              </h1>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {activeWorkerTab === "production" 
+                  ? "Nuskaitykite QR kodus arba spausdinkite prekes žingsnis po žingsnio" 
+                  : "Paruoštų užsakymų išsiuntimas ir lipdukų spausdinimas"}
+              </p>
             </div>
             <button
-              onClick={() => fetchWorkerItems(selectedStationId!)}
+              onClick={() => {
+                fetchWorkerItems(selectedStationId!);
+                fetch("/api/orders").then(r => r.json()).then(setOrders);
+              }}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 text-[10px] font-bold"
             >
               <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
@@ -739,128 +825,456 @@ export default function App() {
             </button>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Quick QR barcode simulator */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-              <h2 className="text-xs font-bold text-slate-900 flex items-center gap-2">
-                <QrCode className="w-4 h-4 text-indigo-600" />
-                QR / Barkodų skaitytuvas gamyboje
-              </h2>
-              <p className="text-[10px] text-slate-500">
-                Įveskite arba nuskenuokite prekės ID (pvz., gautas iš užsakymo prekės ID), kad nurašytumėte žaliavas ir užbaigtumėte gamybą.
-              </p>
-              <div className="flex gap-2.5">
-                <input
-                  type="text"
-                  placeholder="Įveskite prekės ID (pvz., item-1)"
-                  value={scannedCode}
-                  onChange={(e) => setScannedCode(e.target.value)}
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
-                />
-                <button
-                  onClick={handleWorkerQRScan}
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition-colors cursor-pointer"
-                >
-                  Nuskaityti QR
-                </button>
-              </div>
-            </div>
-
-            {/* List and inventory split */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Queue */}
-              <div className="lg:col-span-2 space-y-4">
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
-                    <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Užsakymų prekės gamybai</h3>
-                  </div>
-
-                  <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
-                    {workerItems.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400 text-xs">
-                        Šiuo metu stotelėje nėra laukiančių užsakymų.
-                      </div>
-                    ) : (
-                      workerItems.map((item) => (
-                        <div key={item.id} className="p-4 flex items-start justify-between hover:bg-slate-50/50 transition-colors">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-slate-900">{item.orders?.order_number}</span>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                                item.status === "PENDING_ARTWORK" 
-                                  ? "bg-amber-100 text-amber-800"
-                                  : item.status === "READY_FOR_PRODUCTION"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-purple-100 text-purple-800"
-                              }`}>
-                                {item.status}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-700 font-semibold">{item.quantity}x {item.product_name}</p>
-                            <p className="text-[10px] text-slate-400 font-mono">SKU: {item.sku} | ID: {item.id}</p>
-                            {item.artwork_file_url && (
-                              <a
-                                href={item.artwork_file_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] text-indigo-600 font-bold underline mt-1"
-                              >
-                                <Printer className="w-3 h-3" /> Spaudos failas (PDF)
-                              </a>
-                            )}
-                          </div>
-                          
-                          <div className="flex gap-2">
-                            {item.status === "PENDING_ARTWORK" && (
-                              <button
-                                onClick={() => handleUpdateItemStatus(item.id, "READY_FOR_PRODUCTION")}
-                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded transition-colors cursor-pointer"
-                              >
-                                Patvirtinti maketą
-                              </button>
-                            )}
-                            {item.status === "READY_FOR_PRODUCTION" && (
-                              <button
-                                onClick={() => handleUpdateItemStatus(item.id, "PRINTED_AND_PACKED")}
-                                className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded transition-colors cursor-pointer"
-                              >
-                                Atspausdinta
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+          {activeWorkerTab === "production" ? (
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Quick QR barcode simulator */}
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <h2 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-indigo-600" />
+                  Greitasis QR / Barkodų skaitytuvas stotelėje
+                </h2>
+                <p className="text-[10px] text-slate-500">
+                  Nuskenuokite gaminio ID, kad akimirksniu pažymėtumėte gamybą kaip baigtą ir nurašytumėte reikalingas detales.
+                </p>
+                <div className="flex gap-2.5">
+                  <input
+                    type="text"
+                    placeholder="Nuskenuokite arba įveskite gaminio ID (pvz., item-1)"
+                    value={scannedCode}
+                    onChange={(e) => setScannedCode(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                  />
+                  <button
+                    onClick={handleWorkerQRScan}
+                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Nuskaityti QR
+                  </button>
                 </div>
               </div>
 
-              {/* Station-specific Stock */}
-              <div className="space-y-4">
-                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Sandėlio likučiai</h3>
-                  <div className="space-y-3">
-                    {inventory.map((mat) => (
-                      <div key={mat.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-slate-700">{mat.material_name}</p>
-                          <p className="text-[10px] text-slate-400 font-mono">SKU: {mat.sku}</p>
+              {/* List and wizard split */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Queue */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
+                      <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Užsakymų prekės gamybai</h3>
+                    </div>
+
+                    <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+                      {workerItems.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-xs">
+                          Šiuo metu stotelėje nėra laukiančių užsakymų.
                         </div>
-                        <div className="text-right">
-                          <p className="text-xs font-bold text-slate-900">
-                            {parseFloat(mat.quantity_remaining.toString()).toFixed(1)} {mat.unit}
-                          </p>
-                          {mat.quantity_remaining < mat.critical_threshold && (
-                            <span className="text-[8px] font-black uppercase text-rose-600 bg-rose-50 px-1 py-0.5 rounded">Reikia papildyti</span>
+                      ) : (
+                        workerItems.map((item) => (
+                          <div 
+                            key={item.id} 
+                            onClick={() => {
+                              setActiveWorkerItemId(item.id);
+                              if (!workerSteps[item.id]) {
+                                setWorkerSteps(prev => ({ ...prev, [item.id]: 1 }));
+                              }
+                            }}
+                            className={`p-4 flex items-start justify-between hover:bg-slate-50 transition-colors cursor-pointer border-l-4 ${
+                              activeWorkerItemId === item.id ? 'border-indigo-600 bg-indigo-50/20' : 'border-transparent'
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-900">{item.orders?.order_number}</span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                  item.status === "PENDING_ARTWORK" 
+                                    ? "bg-amber-100 text-amber-800"
+                                    : item.status === "READY_FOR_PRODUCTION"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-purple-100 text-purple-800"
+                                }`}>
+                                  {item.status}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-700 font-semibold">{item.quantity}x {item.product_name}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">SKU: {item.sku} | ID: {item.id}</p>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                              {item.status === "PENDING_ARTWORK" && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateItemStatus(item.id, "READY_FOR_PRODUCTION");
+                                  }}
+                                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded transition-colors cursor-pointer"
+                                >
+                                  Patvirtinti
+                                </button>
+                              )}
+                              {item.status === "READY_FOR_PRODUCTION" && (
+                                <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-2 py-1 rounded">
+                                  Pradėti spaudą →
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right wizard column */}
+                <div className="space-y-4">
+                  {(() => {
+                    const selectedItem = workerItems.find(i => i.id === activeWorkerItemId);
+                    if (selectedItem) {
+                      const step = workerSteps[selectedItem.id] || 1;
+                      const matchedRule = productConfigs.find(c => {
+                        const pattern = c.sku_pattern.replace(/\*/g, ".*");
+                        const regex = new RegExp(`^${pattern}$`, "i");
+                        return regex.test(selectedItem.sku);
+                      });
+
+                      let reqMaterial: any = null;
+                      let reqQty = 0;
+                      let hasEnough = true;
+
+                      if (matchedRule && matchedRule.required_material_sku) {
+                        reqMaterial = inventory.find(m => m.sku === matchedRule.required_material_sku);
+                        reqQty = parseFloat(matchedRule.material_qty_per_item || "1.00") * selectedItem.quantity;
+                        if (reqMaterial) {
+                          hasEnough = parseFloat(reqMaterial.quantity_remaining) >= reqQty;
+                        } else {
+                          hasEnough = false;
+                        }
+                      }
+
+                      return (
+                        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                          <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <div>
+                              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Gamybos vedlys</h3>
+                              <p className="text-[10px] text-slate-500 font-bold truncate max-w-[150px]">{selectedItem.product_name}</p>
+                            </div>
+                            <button
+                              onClick={() => setActiveWorkerItemId(null)}
+                              className="text-slate-400 hover:text-slate-600 font-bold text-xs cursor-pointer"
+                            >
+                              Uždaryti
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            {[1, 2, 3, 4].map(s => (
+                              <div 
+                                key={s} 
+                                className={`flex-1 h-1.5 rounded-full transition-all ${
+                                  step >= s ? 'bg-indigo-600' : 'bg-slate-200'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                            Žingsnis {step} iš 4
+                          </div>
+
+                          {step === 1 && (
+                            <div className="space-y-3">
+                              <p className="text-xs font-bold text-slate-900">1. Pasirinkite spausdinimo stalo dydį:</p>
+                              <p className="text-[10px] text-slate-500">Pasirinkite, koks stalas šiuo metu įdėtas į įrenginį gamybai:</p>
+                              <div className="space-y-2">
+                                {stationBeds.length === 0 ? (
+                                  [
+                                    { id: "mini", name: "Mini FlatBed (335 × 90 mm)" },
+                                    { id: "standart", name: "Standart FlatBed (335 × 420 mm)" }
+                                  ].map(bed => (
+                                    <button
+                                      key={bed.id}
+                                      onClick={() => setSelectedBedId(bed.name)}
+                                      className={`w-full p-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
+                                        selectedBedId === bed.name
+                                          ? "border-indigo-600 bg-indigo-50/20 text-indigo-900 font-bold"
+                                          : "border-slate-200 hover:border-slate-350 text-slate-700 bg-slate-50"
+                                      }`}
+                                    >
+                                      {bed.name}
+                                    </button>
+                                  ))
+                                ) : (
+                                  stationBeds.map(bed => (
+                                    <button
+                                      key={bed.id}
+                                      onClick={() => setSelectedBedId(bed.name)}
+                                      className={`w-full p-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
+                                        selectedBedId === bed.name
+                                          ? "border-indigo-600 bg-indigo-50/20 text-indigo-900 font-bold"
+                                          : "border-slate-200 hover:border-slate-350 text-slate-700 bg-slate-50"
+                                      }`}
+                                    >
+                                      {bed.name} ({bed.width_mm} × {bed.height_mm} mm)
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+
+                              <button
+                                disabled={!selectedBedId}
+                                onClick={() => setStep(selectedItem.id, 2)}
+                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded-lg disabled:opacity-50 cursor-pointer transition-all"
+                              >
+                                Toliau
+                              </button>
+                            </div>
+                          )}
+
+                          {step === 2 && (
+                            <div className="space-y-4">
+                              <p className="text-xs font-bold text-slate-900">2. Sugeneruokite spaudos failą:</p>
+                              <p className="text-[10px] text-slate-500">
+                                Gamybos failas bus generuojamas pritaikytas stalui: <span className="font-bold text-indigo-600">{selectedBedId}</span>
+                              </p>
+
+                              {!selectedItem.artwork_file_url ? (
+                                <button
+                                  onClick={async () => {
+                                    setGeneratingPrintfile(true);
+                                    try {
+                                      const res = await fetch("/api/production/generate-printfile", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ itemId: selectedItem.id, bedName: selectedBedId })
+                                      });
+                                      const data = await res.json();
+                                      if (data.success) {
+                                        showNotification("success", "Spaudos failas sugeneruotas!");
+                                        fetchWorkerItems(selectedStationId!);
+                                      }
+                                    } catch (err) {
+                                      showNotification("error", "Klaida generuojant failą.");
+                                    } finally {
+                                      setGeneratingPrintfile(false);
+                                    }
+                                  }}
+                                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all"
+                                >
+                                  <RefreshCw className={`w-4 h-4 ${generatingPrintfile ? 'animate-spin' : ''}`} />
+                                  {generatingPrintfile ? "Generuojama..." : "Generuoti spaudos failą (PDF)"}
+                                </button>
+                              ) : (
+                                <div className="space-y-2">
+                                  <a
+                                    href={selectedItem.artwork_file_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                    Atsisiųsti PDF maketą
+                                  </a>
+                                </div>
+                              )}
+
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setStep(selectedItem.id, 1)}
+                                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 rounded-lg cursor-pointer transition-all"
+                                >
+                                  Atgal
+                                </button>
+                                <button
+                                  disabled={!selectedItem.artwork_file_url}
+                                  onClick={() => setStep(selectedItem.id, 3)}
+                                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded-lg disabled:opacity-50 cursor-pointer transition-all"
+                                >
+                                  Toliau
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {step === 3 && (
+                            <div className="space-y-4">
+                              <p className="text-xs font-bold text-slate-900">3. Klijavimo detalės & Sandėlis:</p>
+                              
+                              {matchedRule && matchedRule.required_material_sku ? (
+                                <div className="p-3 bg-slate-50 border border-slate-150 rounded-xl space-y-3">
+                                  <div>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase">Reikalaujama gaminio bazė</p>
+                                    <p className="text-xs font-bold text-slate-800">{reqMaterial?.material_name || matchedRule.required_material_sku}</p>
+                                    <p className="text-[9px] text-slate-400 font-mono">SKU: {matchedRule.required_material_sku}</p>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-[11px]">
+                                    <div>
+                                      <p className="text-slate-500 font-semibold">Reikia kiekiui ({selectedItem.quantity} vnt.):</p>
+                                      <p className="font-black text-slate-900">{reqQty} vnt.</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-slate-500 font-semibold">Likutis sandėlyje:</p>
+                                      <p className={`font-black ${hasEnough ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {reqMaterial ? parseFloat(reqMaterial.quantity_remaining).toFixed(1) : 0} vnt.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className={`text-[10px] font-bold p-1.5 rounded-lg text-center ${
+                                    hasEnough ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                                  }`}>
+                                    {hasEnough ? "✓ Likutis pakankamas" : "✗ DĖMESIO: Nepakanka detalių!"}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-slate-500 italic">Šiam SKU klijavimo bazių receptūra nenustatyta.</p>
+                              )}
+
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setStep(selectedItem.id, 2)}
+                                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 rounded-lg cursor-pointer transition-all"
+                                >
+                                  Atgal
+                                </button>
+                                <button
+                                  onClick={() => setStep(selectedItem.id, 4)}
+                                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded-lg cursor-pointer transition-all"
+                                >
+                                  Toliau
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {step === 4 && (
+                            <div className="space-y-4">
+                              <p className="text-xs font-bold text-slate-900">4. Užbaigti gamybą:</p>
+                              <p className="text-[10px] text-slate-500">
+                                Patvirtinkite, kad gaminys pilnai atspausdintas ir paruoštas siuntimui. Sandėlio likutis bus nurašytas automatiškai.
+                              </p>
+
+                              <button
+                                onClick={async () => {
+                                  await handleUpdateItemStatus(selectedItem.id, "PRINTED_AND_PACKED");
+                                  setActiveWorkerItemId(null);
+                                  // Verify if order is completed
+                                  const remaining = workerItems.filter(i => i.id !== selectedItem.id && i.status !== "PRINTED_AND_PACKED" && i.order_id === selectedItem.order_id);
+                                  if (remaining.length === 0) {
+                                    showNotification("success", `Gamyba baigta. Užsakymas paruoštas išsiuntimui!`);
+                                    setActiveWorkerTab("shipping");
+                                  }
+                                }}
+                                className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-md transition-all"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                Patvirtinti gamybos pabaigą
+                              </button>
+
+                              <button
+                                onClick={() => setStep(selectedItem.id, 3)}
+                                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 rounded-lg cursor-pointer transition-all"
+                              >
+                                Atgal
+                              </button>
+                            </div>
                           )}
                         </div>
+                      );
+                    }
+
+                    // Default render: inventory levels
+                    return (
+                      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Sandėlio likučiai</h3>
+                        <div className="space-y-3">
+                          {inventory.map((mat) => (
+                            <div key={mat.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-bold text-slate-700">{mat.material_name}</p>
+                                <p className="text-[10px] text-slate-400 font-mono">SKU: {mat.sku}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xs font-bold text-slate-900">
+                                  {parseFloat(mat.quantity_remaining.toString()).toFixed(1)} {mat.unit}
+                                </p>
+                                {mat.quantity_remaining < mat.critical_threshold && (
+                                  <span className="text-[8px] font-black uppercase text-rose-600 bg-rose-50 px-1 py-0.5 rounded">Reikia papildyti</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          ) : (
+            // DEDICATED SHIPPING TAB
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <h2 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-emerald-600" />
+                  Paruoštų užsakymų išsiuntimas (Fulfillment)
+                </h2>
+                <p className="text-[10px] text-slate-500">
+                  Užbaikite užsakymus, kurių visos dalys jau yra pagamintos. Paspaudus "Išsiųsti", sugeneruojamas DPD lipdukas.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Orders list */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-200 bg-slate-50/50">
+                      <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Laukia išsiuntimo</h3>
+                    </div>
+
+                    <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+                      {orders.filter(o => o.status === "PRINTED_AND_PACKED").length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-xs">
+                          Šiuo metu nėra užsakymų paruoštų siuntimui.
+                        </div>
+                      ) : (
+                        orders.filter(o => o.status === "PRINTED_AND_PACKED").map((order) => (
+                          <div key={order.id} className="p-4 flex items-start justify-between hover:bg-slate-50/30 transition-colors">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-900">{order.order_number}</span>
+                                <span className="text-[9px] bg-purple-100 text-purple-800 font-bold uppercase px-1.5 py-0.2 rounded">Paruoštas</span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-800">{order.customer_name}</p>
+                              <p className="text-[10px] text-slate-500">
+                                Adresas: {order.shipping_address?.city || ""}, {order.shipping_address?.address || order.shipping_address?.address1 || ""}
+                              </p>
+                            </div>
+
+                            <button
+                              onClick={() => fulfillOrder(order.id)}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-3.5 py-2 rounded transition-colors cursor-pointer flex items-center gap-1 shadow-sm"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                              Išsiųsti
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sidebar details */}
+                <div className="space-y-4">
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Lipdukų spausdinimas</h3>
+                    <p className="text-[10px] text-slate-500 font-semibold">
+                      Užsakymo išsiuntimo metu bus automatiškai atidarytas siuntos sekimo važtaraščio langas.
+                    </p>
+                    <div className="border border-dashed border-slate-200 rounded-lg p-8 text-center text-slate-400 text-[10px]">
+                      Nuskenuokite arba paspauskite išsiuntimo mygtuką užsakymui užbaigti.
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </main>
       </div>
     );
@@ -2042,12 +2456,125 @@ Viso apmokėta: ${order.total_price.toFixed(2)} EUR
                     <p className="text-xs text-slate-400 italic py-2">Nėra sukurtų stotelių.</p>
                   ) : (
                     stationsList.map((s) => (
-                      <div key={s.id} className="py-3 flex justify-between items-start">
-                        <div>
-                          <p className="text-xs font-bold text-slate-900">{s.name} <span className="bg-slate-100 text-slate-700 font-mono text-[9px] px-1 py-0.2 rounded ml-1.5">{s.code}</span></p>
-                          <p className="text-[10px] text-slate-500 mt-1">{s.description || "Nėra aprašymo."}</p>
+                      <div key={s.id} className="py-3 border-b border-slate-100 last:border-0">
+                        <div 
+                          className="flex justify-between items-start cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors" 
+                          onClick={() => handleToggleStationExpand(s.id)}
+                        >
+                          <div>
+                            <p className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{s.name}</span>
+                              <span className="bg-slate-100 text-slate-700 font-mono text-[9px] px-1 py-0.2 rounded">{s.code}</span>
+                              <span className="text-[9px] text-slate-400 font-bold ml-1.5">
+                                {expandedStationId === s.id ? "▲ Suskleisti" : "▼ Valdyti stalus"}
+                              </span>
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-1">{s.description || "Nėra aprašymo."}</p>
+                          </div>
+                          <span className="text-[9px] text-slate-400 font-mono">ID: {s.id.substring(0, 8)}</span>
                         </div>
-                        <span className="text-[9px] text-slate-400 font-mono">ID: {s.id.substring(0, 8)}</span>
+
+                        {expandedStationId === s.id && (
+                          <div className="mt-3 pl-4 border-l-2 border-indigo-500 space-y-4">
+                            {/* List of current beds */}
+                            <div className="space-y-1.5">
+                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Sukonfigūruoti stalo dydžiai:</p>
+                              {expandedBedsList.length === 0 ? (
+                                <p className="text-[10px] text-slate-400 italic">Ši stotelė neturi sukonfigūruotų stalų dydžių.</p>
+                              ) : (
+                                expandedBedsList.map((bed) => (
+                                  <div key={bed.id} className="flex justify-between items-center text-[10px] bg-slate-50 p-2 rounded border border-slate-100">
+                                    <span className="font-semibold text-slate-700">{bed.name} ({bed.width_mm} × {bed.height_mm} mm)</span>
+                                    <button
+                                      type="button"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`Ar tikrai norite pašalinti stalą '${bed.name}'?`)) {
+                                          try {
+                                            await fetch(`/api/beds/${bed.id}`, { method: "DELETE" });
+                                            showNotification("success", `Stalas pašalintas.`);
+                                            // Refetch beds
+                                            const resB = await fetch(`/api/stations/${s.id}/beds`);
+                                            const dataB = await resB.json();
+                                            setExpandedBedsList(dataB);
+                                          } catch (err) {
+                                            showNotification("error", "Nepavyko pašalinti stalo.");
+                                          }
+                                        }
+                                      }}
+                                      className="text-rose-600 hover:text-rose-800 font-bold cursor-pointer"
+                                    >
+                                      Pašalinti
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+
+                            {/* Add bed form */}
+                            <form
+                              onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (!newBedName || !newBedWidth || !newBedHeight) return;
+                                try {
+                                  const res = await fetch(`/api/stations/${s.id}/beds`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      name: newBedName,
+                                      width_mm: newBedWidth,
+                                      height_mm: newBedHeight
+                                    })
+                                  });
+                                  const data = await res.json();
+                                  if (data.id) {
+                                    showNotification("success", `Stalas '${newBedName}' pridėtas.`);
+                                    setNewBedName("");
+                                    // Refetch beds
+                                    const resB = await fetch(`/api/stations/${s.id}/beds`);
+                                    const dataB = await resB.json();
+                                    setExpandedBedsList(dataB);
+                                  }
+                                } catch (err) {
+                                  showNotification("error", "Nepavyko pridėti stalo.");
+                                }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 space-y-2"
+                            >
+                              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Pridėti naują stalo dydį:</p>
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Pavadinimas (pvz., Mini FlatBed)"
+                                  value={newBedName}
+                                  onChange={(e) => setNewBedName(e.target.value)}
+                                  className="col-span-2 bg-white border border-slate-200 rounded px-2.5 py-1 text-[10px] text-slate-800"
+                                />
+                                <input
+                                  type="number"
+                                  placeholder="Plotis (mm)"
+                                  value={newBedWidth}
+                                  onChange={(e) => setNewBedWidth(e.target.value)}
+                                  className="bg-white border border-slate-200 rounded px-2.5 py-1 text-[10px] text-slate-800"
+                                />
+                                <input
+                                  type="number"
+                                  placeholder="Aukštis (mm)"
+                                  value={newBedHeight}
+                                  onChange={(e) => setNewBedHeight(e.target.value)}
+                                  className="bg-white border border-slate-200 rounded px-2.5 py-1 text-[10px] text-slate-800"
+                                />
+                              </div>
+                              <button
+                                type="submit"
+                                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-[9px] py-1 rounded cursor-pointer"
+                              >
+                                Pridėti stalą
+                              </button>
+                            </form>
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
@@ -2105,6 +2632,30 @@ Viso apmokėta: ${order.total_price.toFixed(2)} EUR
                       <option value="custom_sticker">Custom Sticker (Pjaustomi lipdukai)</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Reikalaujama žaliava (Receptūra)</label>
+                    <select
+                      value={newConfigMatSku}
+                      onChange={(e) => setNewConfigMatSku(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    >
+                      <option value="">Pasirinkite žaliavą (neprivaloma)...</option>
+                      {inventory.map((mat) => (
+                        <option key={mat.id} value={mat.sku}>{mat.material_name} ({mat.sku})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Reikalingas žaliavos kiekis prekei</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="pvz., 1.00"
+                      value={newConfigMatQty}
+                      onChange={(e) => setNewConfigMatQty(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
                   <button
                     type="submit"
                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded transition-all cursor-pointer"
@@ -2124,7 +2675,7 @@ Viso apmokėta: ${order.total_price.toFixed(2)} EUR
                       <div key={c.id} className="py-3 flex justify-between items-start">
                         <div>
                           <p className="text-xs font-bold text-slate-900">{c.name} <span className="bg-indigo-50 text-indigo-700 font-mono text-[9px] px-1 py-0.2 rounded ml-1.5">{c.sku_pattern}</span></p>
-                          <p className="text-[10px] text-slate-500 mt-1">Stotelė: <span className="font-semibold text-slate-700">{c.stations?.name || "Nepriskirta"}</span> | Generavimas: <span className="font-mono">{c.artwork_generator_type}</span></p>
+                          <p className="text-[10px] text-slate-500 mt-1">Stotelė: <span className="font-semibold text-slate-700">{c.stations?.name || "Nepriskirta"}</span> | Generavimas: <span className="font-mono">{c.artwork_generator_type}</span>{c.required_material_sku && <span className="ml-1.5 text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase">Receptas: {c.required_material_sku} ({c.material_qty_per_item} vnt)</span>}</p>
                         </div>
                         <span className="text-[9px] text-slate-400 font-mono">ID: {c.id.substring(0, 8)}</span>
                       </div>
