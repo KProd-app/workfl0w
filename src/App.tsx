@@ -692,64 +692,68 @@ export default function App() {
 
   if (userRole === null) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans relative overflow-hidden">
-        {/* Decorative background gradients */}
-        <div className="absolute top-0 -left-4 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute -bottom-8 right-20 w-96 h-96 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-        
-        <div className="w-full max-w-md p-8 bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl relative z-10 space-y-6">
-          <div className="text-center space-y-2">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/30">
-              <Layers className="w-6 h-6 text-white" />
+      <div className="h-screen w-screen flex items-center justify-center bg-[#090d16] text-slate-100 font-sans relative overflow-hidden">
+        {/* Sleek radial glowing background */}
+        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/15 rounded-full filter blur-[120px] pointer-events-none"></div>
+        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[500px] h-[500px] bg-emerald-600/10 rounded-full filter blur-[120px] pointer-events-none"></div>
+
+        <div className="w-full max-w-md p-8 bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 rounded-3xl shadow-2xl relative z-10 space-y-7 animate-fadeIn">
+          <div className="text-center space-y-3">
+            <div className="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-indigo-600/25">
+              <Layers className="w-7 h-7 text-white" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-white mt-4">Printflow ERP Portalas</h1>
-            <p className="text-slate-400 text-xs">Pasirinkite prisijungimo būdą ir pradėkite darbą</p>
+            <div>
+              <h1 className="text-2xl font-extrabold tracking-tight text-white mt-4 bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+                Printflow ERP
+              </h1>
+              <p className="text-slate-400 text-xs mt-1">Išmanioji gamybos ir sandėlio valdymo sistema</p>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-400 block mb-1.5">Naudotojo rolė</label>
-              <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block mb-1">Pasirinkite naudotojo paskyrą</label>
+              <div className="grid grid-cols-2 gap-3.5">
                 <button
                   type="button"
                   onClick={() => { setSelectedRole("ADMIN"); }}
-                  className={`p-3.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-2 transition-all ${
+                  className={`p-4 rounded-2xl border text-xs font-bold flex flex-col items-center gap-3 transition-all duration-200 cursor-pointer ${
                     selectedRole === "ADMIN" 
-                      ? "border-indigo-500 bg-indigo-500/10 text-white" 
-                      : "border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400"
+                      ? "border-indigo-500 bg-indigo-600/10 text-white shadow-[0_0_20px_rgba(99,102,241,0.15)]" 
+                      : "border-slate-800 hover:border-slate-700 bg-slate-900/40 text-slate-400"
                   }`}
                 >
-                  <TrendingUp className="w-5 h-5" />
+                  <TrendingUp className={`w-5 h-5 transition-transform duration-200 ${selectedRole === "ADMIN" ? "scale-110 text-indigo-400" : ""}`} />
                   Administratorius
                 </button>
                 <button
                   type="button"
                   onClick={() => { setSelectedRole("WORKER"); }}
-                  className={`p-3.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-2 transition-all ${
+                  className={`p-4 rounded-2xl border text-xs font-bold flex flex-col items-center gap-3 transition-all duration-200 cursor-pointer ${
                     selectedRole === "WORKER" 
-                      ? "border-indigo-500 bg-indigo-500/10 text-white" 
-                      : "border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400"
+                      ? "border-indigo-500 bg-indigo-600/10 text-white shadow-[0_0_20px_rgba(99,102,241,0.15)]" 
+                      : "border-slate-800 hover:border-slate-700 bg-slate-900/40 text-slate-400"
                   }`}
                 >
-                  <QrCode className="w-5 h-5" />
-                  Darbuotojas
+                  <QrCode className={`w-5 h-5 transition-transform duration-200 ${selectedRole === "WORKER" ? "scale-110 text-indigo-400" : ""}`} />
+                  Gamybos darbuotojas
                 </button>
               </div>
             </div>
 
             {selectedRole === "WORKER" && (
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-400 block mb-1.5">Gamybos stotelė</label>
+              <div className="space-y-2 animate-fadeIn">
+                <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Pasirinkite darbo stotelę</label>
                 <select
                   value={tempStationId}
                   onChange={(e) => {
                     setTempStationId(e.target.value);
                   }}
-                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-slate-950/80 border border-slate-800 text-slate-200 rounded-2xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
-                  <option value="">Pasirinkite stotelę...</option>
+                  <option value="">Pasirinkite gamybos stotelę...</option>
                   {stationsList.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                   ))}
                 </select>
               </div>
@@ -759,7 +763,7 @@ export default function App() {
               type="button"
               onClick={handleLogin}
               disabled={selectedRole === "WORKER" && !tempStationId}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs py-3.5 rounded-xl transition-all shadow-lg shadow-indigo-600/30 cursor-pointer"
+              className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white font-bold text-xs py-4 rounded-2xl transition-all duration-200 shadow-xl shadow-indigo-600/20 cursor-pointer"
             >
               Prisijungti prie sistemos
             </button>
@@ -1530,31 +1534,53 @@ export default function App() {
         {/* Content Zone Grid & Stats row */}
         <div className="flex-1 p-4 lg:p-5 flex flex-col gap-4 overflow-hidden bg-slate-50">
           {/* Top 4 Compact Stats Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
-            <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Laukia maketų</div>
-              <div className="text-lg font-extrabold text-slate-800 mt-0.5">{pendingArtworkCount} užsak.</div>
-              <div className="text-[9px] text-amber-600 mt-0.5 font-mono">Awaiting Webhook / Art</div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gamybos eilė</div>
-              <div className="text-lg font-extrabold text-slate-800 mt-0.5">{readyProductionCount} užsak.</div>
-              <div className="text-[9px] text-indigo-600 mt-0.5 font-mono">Ready for Print / Press</div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kritinės žaliavos</div>
-              <div className="text-lg font-extrabold text-slate-850 mt-0.5">{criticalStockCount} pozic.</div>
-              <div className="text-[9px] text-rose-600 font-mono mt-0.5 font-semibold">Requires Attention!</div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mėnesio pelnas</div>
-              <div className="text-lg font-extrabold text-slate-800 mt-0.5">
-                {financeSummary ? `${financeSummary.totalNetProfit.toFixed(2)} €` : "Skaičiuojama..."}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+            <div className="bg-white border border-slate-150 rounded-2xl p-4 flex items-center justify-between shadow-xs transition-all hover:shadow-sm">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Laukia maketų</span>
+                <span className="text-xl font-extrabold text-slate-900 mt-1 block">{pendingArtworkCount} užsak.</span>
+                <span className="text-[9px] text-amber-700 bg-amber-50/70 px-1.5 py-0.5 rounded font-mono font-bold mt-1 inline-block">Awaiting Artwork</span>
               </div>
-              <div className="text-[9px] text-emerald-600 mt-0.5 font-mono font-semibold">Margin: {financeSummary ? `${financeSummary.profitMarginPercent}%` : "34.2%"}</div>
+              <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
+                <Printer className="w-4 h-4" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-150 rounded-2xl p-4 flex items-center justify-between shadow-xs transition-all hover:shadow-sm">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Gamybos eilė</span>
+                <span className="text-xl font-extrabold text-slate-900 mt-1 block">{readyProductionCount} užsak.</span>
+                <span className="text-[9px] text-indigo-700 bg-indigo-50/70 px-1.5 py-0.5 rounded font-mono font-bold mt-1 inline-block">Ready for Print</span>
+              </div>
+              <div className="w-9 h-9 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                <Layers className="w-4 h-4" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-150 rounded-2xl p-4 flex items-center justify-between shadow-xs transition-all hover:shadow-sm">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Kritinės žaliavas</span>
+                <span className="text-xl font-extrabold text-slate-900 mt-1 block">{criticalStockCount} pozic.</span>
+                <span className="text-[9px] text-rose-700 bg-rose-50/75 px-1.5 py-0.5 rounded font-mono font-bold mt-1 inline-block">Requires Attention!</span>
+              </div>
+              <div className="w-9 h-9 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-150 rounded-2xl p-4 flex items-center justify-between shadow-xs transition-all hover:shadow-sm">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Apyvarta</span>
+                <span className="text-xl font-extrabold text-slate-900 mt-1 block">
+                  {financeSummary ? `${financeSummary.totalRevenue.toFixed(2)} €` : "0.00 €"}
+                </span>
+                <span className="text-[9px] text-emerald-755 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-mono font-bold mt-1 inline-block">
+                  Margin: {financeSummary ? `${financeSummary.profitMarginPercent}%` : "34.2%"}
+                </span>
+              </div>
+              <div className="w-9 h-9 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                <TrendingUp className="w-4 h-4" />
+              </div>
             </div>
           </div>
 
