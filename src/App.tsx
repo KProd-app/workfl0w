@@ -149,6 +149,14 @@ export default function App() {
   const [newBedWidth, setNewBedWidth] = useState("335");
   const [newBedHeight, setNewBedHeight] = useState("90");
 
+  // Form states for inventory
+  const [newInvName, setNewInvName] = useState("");
+  const [newInvSku, setNewInvSku] = useState("");
+  const [newInvQty, setNewInvQty] = useState("100.00");
+  const [newInvUnit, setNewInvUnit] = useState("pcs");
+  const [newInvThreshold, setNewInvThreshold] = useState("10.00");
+  const [newInvCost, setNewInvCost] = useState("1.00");
+
   // Status/Loader states
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -608,6 +616,44 @@ export default function App() {
       }
     } catch (err) {
       showNotification("error", "Ryšio klaida.");
+    }
+  };
+
+  const handleAddInventoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newInvName || !newInvSku || !newInvQty) {
+      showNotification("error", "Prašome užpildyti visus privalomus laukelius.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          material_name: newInvName,
+          sku: newInvSku,
+          quantity_remaining: parseFloat(newInvQty) || 0.00,
+          unit: newInvUnit,
+          critical_threshold: parseFloat(newInvThreshold) || 10.00,
+          cost_per_unit: parseFloat(newInvCost) || 0.00
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showNotification("success", `Žaliava '${newInvName}' sėkmingai sukurta.`);
+        setNewInvName("");
+        setNewInvSku("");
+        setNewInvQty("100.00");
+        setNewInvUnit("pcs");
+        setNewInvThreshold("10.00");
+        setNewInvCost("1.00");
+        fetchAllData();
+      } else {
+        showNotification("error", data.error || "Nepavyko sukurti žaliavos.");
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification("error", "Nepavyko sukurti žaliavos.");
     }
   };
 
@@ -2162,28 +2208,120 @@ Viso apmokėta: ${order.total_price.toFixed(2)} EUR
                       </div>
                     </div>
 
-                    {/* Right Column: Audit trail log */}
-                    <div className="w-full md:w-80 bg-white rounded border border-slate-200 p-4 flex flex-col h-full shadow-xs shrink-0 overflow-hidden">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 shrink-0">
-                        <Layers className="w-3.5 h-3.5 text-indigo-500" />
-                        Žaliavų nurašymo žurnalas
-                      </h3>
-                      <p className="text-[10px] text-slate-500 mb-2 leading-relaxed shrink-0">Automatiškai generuojami įrašai iš gamybos salės QR skenerių:</p>
-                      
-                      <div className="flex-1 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-150 font-mono text-[10px]">
-                        {orders.filter(o => o.status === "PRINTED_AND_PACKED" || o.status === "FULFILLED").map((order, idx) => (
-                          <div key={idx} className="p-1.5 bg-white border border-slate-100 rounded hover:shadow-2xs transition-shadow">
-                            <span className="font-bold text-slate-700 block text-[9px]">Užsakymas {order.order_number}:</span>
-                            <span className="font-medium text-rose-600 block mt-0.5">
-                              -2.4m² Drobės, -45ml Rašalo, -1 Tūta
-                            </span>
+                    {/* Right Column: Inventory Creation Form & Audit Log */}
+                    <div className="w-full md:w-80 space-y-4 shrink-0 flex flex-col h-full overflow-hidden">
+                      {/* Section 1: Add New Material */}
+                      <div className="bg-white rounded border border-slate-200 p-4 space-y-3 shrink-0">
+                        <h3 className="text-[10px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                          <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                          Pridėti naują žaliavą
+                        </h3>
+                        <form onSubmit={handleAddInventoryItem} className="space-y-2.5">
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Pavadinimas</label>
+                            <input
+                              type="text"
+                              placeholder="pvz., Difuzoriaus stiklas"
+                              value={newInvName}
+                              onChange={(e) => setNewInvName(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              required
+                            />
                           </div>
-                        ))}
-                        {orders.filter(o => o.status === "PRINTED_AND_PACKED" || o.status === "FULFILLED").length === 0 && (
-                          <div className="py-12 text-center italic text-slate-400">
-                            Nėra nurašymo įrašų. Atlikite spaudos/QR skenavimo veiksmus.
+                          <div>
+                            <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">SKU kodas (receptams)</label>
+                            <input
+                              type="text"
+                              placeholder="pvz., DIFFUSER-GLASS"
+                              value={newInvSku}
+                              onChange={(e) => setNewInvSku(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              required
+                            />
                           </div>
-                        )}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Likutis</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="100.00"
+                                value={newInvQty}
+                                onChange={(e) => setNewInvQty(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Mato vnt.</label>
+                              <select
+                                value={newInvUnit}
+                                onChange={(e) => setNewInvUnit(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              >
+                                <option value="pcs">vnt (pcs)</option>
+                                <option value="m2">m² (kv. m)</option>
+                                <option value="ml">ml (mililitrai)</option>
+                                <option value="kg">kg (kilogramai)</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Kritinė riba</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="10.00"
+                                value={newInvThreshold}
+                                onChange={(e) => setNewInvThreshold(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Savikaina (€/vnt)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder="1.00"
+                                value={newInvCost}
+                                onChange={(e) => setNewInvCost(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2 rounded cursor-pointer transition-all shadow-sm"
+                          >
+                            Sukurti žaliavą
+                          </button>
+                        </form>
+                      </div>
+
+                      {/* Section 2: Audit trail log */}
+                      <div className="bg-white rounded border border-slate-200 p-4 flex flex-col flex-1 shadow-xs overflow-hidden">
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 shrink-0">
+                          <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                          Žaliavų nurašymo žurnalas
+                        </h3>
+                        <p className="text-[10px] text-slate-500 mb-2 leading-relaxed shrink-0">Automatiškai generuojami įrašai iš gamybos salės QR skenerių:</p>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-1.5 bg-slate-50/50 p-2 rounded border border-slate-150 font-mono text-[10px]">
+                          {orders.filter(o => o.status === "PRINTED_AND_PACKED" || o.status === "FULFILLED").map((order, idx) => (
+                            <div key={idx} className="p-1.5 bg-white border border-slate-100 rounded hover:shadow-2xs transition-shadow">
+                              <span className="font-bold text-slate-700 block text-[9px]">Užsakymas {order.order_number}:</span>
+                              <span className="font-medium text-rose-600 block mt-0.5">
+                                Atliktas nurašymas pagal prekės receptą
+                              </span>
+                            </div>
+                          ))}
+                          {orders.filter(o => o.status === "PRINTED_AND_PACKED" || o.status === "FULFILLED").length === 0 && (
+                            <div className="py-12 text-center italic text-slate-400">
+                              Nėra nurašymo įrašų. Atlikite gamybos pabaigos veiksmus.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 

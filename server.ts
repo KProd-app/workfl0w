@@ -930,6 +930,30 @@ const app = express();
     }
   });
 
+  app.post("/api/inventory", async (req, res) => {
+    const { material_name, sku, quantity_remaining, unit, critical_threshold, cost_per_unit } = req.body;
+    try {
+      const { data, error } = await supabase
+        .from("inventory")
+        .insert([{
+          material_name,
+          sku,
+          quantity_remaining: parseFloat(quantity_remaining) || 0.00,
+          unit,
+          critical_threshold: parseFloat(critical_threshold) || 10.00,
+          cost_per_unit: parseFloat(cost_per_unit) || 0.00
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.status(201).json(data);
+    } catch (err: any) {
+      console.error("Failed to create inventory item:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/invoices", async (req, res) => {
     try {
       const { data, error } = await supabase
