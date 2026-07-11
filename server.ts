@@ -6,8 +6,8 @@
 import express from "express";
 import crypto from "crypto";
 import * as dotenv from "dotenv";
-import { supabase } from "./lib/supabase";
-import { InvoiceService } from "./lib/services/invoice-service";
+import { supabase } from "./lib/supabase.js";
+import { InvoiceService } from "./lib/services/invoice-service.js";
 
 // Load environment variables
 dotenv.config();

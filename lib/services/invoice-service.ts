@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { supabase } from "../supabase";
+import { supabase } from "../supabase.js";
 import nodemailer from "nodemailer";
 
 // Email Client Settings (using standard SMTP/Nodemailer for maximum flexibility)
