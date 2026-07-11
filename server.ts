@@ -5,8 +5,6 @@
 
 import express from "express";
 import crypto from "crypto";
-import path from "path";
-import { createServer as createViteServer } from "vite";
 import * as dotenv from "dotenv";
 import { supabase } from "./lib/supabase";
 import { InvoiceService } from "./lib/services/invoice-service";
