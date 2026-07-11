@@ -103,7 +103,7 @@ interface MonthlySummary {
 
 export default function App() {
   // Navigation tabs
-  const [activeTab, setActiveTab] = useState<"production" | "webhook" | "inventory" | "finance" | "emails">("production");
+  const [activeTab, setActiveTab] = useState<"production" | "webhook" | "inventory" | "finance" | "emails" | "config">("production");
 
   // State managers
   const [orders, setOrders] = useState<Order[]>([]);
@@ -111,6 +111,26 @@ export default function App() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [financeSummary, setFinanceSummary] = useState<MonthlySummary | null>(null);
+
+  // SaaS Multi-Station & Role states
+  const [stationsList, setStationsList] = useState<any[]>([]);
+  const [productConfigs, setProductConfigs] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState<"ADMIN" | "WORKER" | null>(null);
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+  const [selectedStationName, setSelectedStationName] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<"ADMIN" | "WORKER">("ADMIN");
+  const [tempStationId, setTempStationId] = useState<string>("");
+  const [workerItems, setWorkerItems] = useState<any[]>([]);
+  const [adminStationFilter, setAdminStationFilter] = useState<string>("ALL");
+
+  // Form states for creating stations and configs
+  const [newStationName, setNewStationName] = useState("");
+  const [newStationCode, setNewStationCode] = useState("");
+  const [newStationDesc, setNewStationDesc] = useState("");
+  const [newConfigName, setNewConfigName] = useState("");
+  const [newConfigSku, setNewConfigSku] = useState("");
+  const [newConfigStationId, setNewConfigStationId] = useState("");
+  const [newConfigArtType, setNewConfigArtType] = useState("standard_canvas");
 
   // Status/Loader states
   const [loading, setLoading] = useState(true);
@@ -146,12 +166,14 @@ export default function App() {
   const fetchAllData = async () => {
     setRefreshing(true);
     try {
-      const [resOrders, resInv, resInvoices, resEmails, resFinance] = await Promise.all([
+      const [resOrders, resInv, resInvoices, resEmails, resFinance, resStations, resConfigs] = await Promise.all([
         fetch("/api/orders").then(r => r.json()),
         fetch("/api/inventory").then(r => r.json()),
         fetch("/api/invoices").then(r => r.json()),
         fetch("/api/emails/logs").then(r => r.json()),
-        fetch("/api/finance/monthly-summary").then(r => r.json())
+        fetch("/api/finance/monthly-summary").then(r => r.json()),
+        fetch("/api/stations").then(r => r.json()),
+        fetch("/api/products/configs").then(r => r.json())
       ]);
 
       setOrders(resOrders);
@@ -159,6 +181,8 @@ export default function App() {
       setInvoices(resInvoices);
       setEmailLogs(resEmails);
       setFinanceSummary(resFinance);
+      setStationsList(resStations);
+      setProductConfigs(resConfigs);
     } catch (err) {
       console.error("Klaida nuskaitant ERP duomenis:", err);
       showNotification("error", "Nepavyko prisijungti prie Express backend serverio. Bandykite dar kartą.");
@@ -168,9 +192,146 @@ export default function App() {
     }
   };
 
+  const fetchWorkerItems = async (stationId: string) => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`/api/stations/${stationId}/items`);
+      const data = await res.json();
+      setWorkerItems(data);
+    } catch (err) {
+      console.error("Failed to fetch worker items:", err);
+      showNotification("error", "Nepavyko atnaujinti stotelės užsakymų.");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  useEffect(() => {
+    if (userRole === "WORKER" && selectedStationId) {
+      fetchWorkerItems(selectedStationId);
+    }
+  }, [userRole, selectedStationId]);
+
+  const handleLogin = () => {
+    if (selectedRole === "ADMIN") {
+      setUserRole("ADMIN");
+    } else {
+      const matched = stationsList.find(s => s.id === tempStationId);
+      if (matched) {
+        setSelectedStationId(matched.id);
+        setSelectedStationName(matched.name);
+        setUserRole("WORKER");
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    setUserRole(null);
+    setSelectedStationId(null);
+    setSelectedStationName(null);
+    setTempStationId("");
+  };
+
+  const handleUpdateItemStatus = async (itemId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/order-items/${itemId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showNotification("success", `Prekės statusas atnaujintas į ${newStatus}.`);
+        if (selectedStationId) {
+          fetchWorkerItems(selectedStationId);
+        }
+        // Refresh orders and inventory
+        fetch("/api/orders").then(r => r.json()).then(setOrders);
+        fetch("/api/inventory").then(r => r.json()).then(setInventory);
+      } else {
+        showNotification("error", data.error || "Nepavyko atnaujinti prekės būsenos.");
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification("error", "Klaida atnaujinant būseną.");
+    }
+  };
+
+  const handleWorkerQRScan = async () => {
+    if (!scannedCode) return;
+    try {
+      const matchedItem = workerItems.find(item => item.id === scannedCode || item.shopify_line_item_id === scannedCode);
+      if (!matchedItem) {
+        showNotification("error", "Šioje stotelėje nerasta prekė su tokiu kodu.");
+        return;
+      }
+      await handleUpdateItemStatus(matchedItem.id, "PRINTED_AND_PACKED");
+      setScannedCode("");
+    } catch (err) {
+      console.error(err);
+      showNotification("error", "Klaida nuskaitant QR kodą.");
+    }
+  };
+
+  const handleAddStation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newStationName || !newStationCode) return;
+    try {
+      const res = await fetch("/api/stations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newStationName,
+          code: newStationCode,
+          description: newStationDesc
+        })
+      });
+      const data = await res.json();
+      if (data.id) {
+        showNotification("success", `Stotelė '${newStationName}' sėkmingai sukurta.`);
+        setNewStationName("");
+        setNewStationCode("");
+        setNewStationDesc("");
+        fetch("/api/stations").then(r => r.json()).then(setStationsList);
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification("error", "Nepavyko sukurti stotelės.");
+    }
+  };
+
+  const handleAddConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newConfigName || !newConfigSku || !newConfigStationId) return;
+    try {
+      const res = await fetch("/api/products/configs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newConfigName,
+          sku_pattern: newConfigSku,
+          station_id: newConfigStationId,
+          artwork_generator_type: newConfigArtType
+        })
+      });
+      const data = await res.json();
+      if (data.id) {
+        showNotification("success", `Taisyklė '${newConfigName}' sėkmingai sukurta.`);
+        setNewConfigName("");
+        setNewConfigSku("");
+        setNewConfigStationId("");
+        setNewConfigArtType("standard_canvas");
+        fetch("/api/products/configs").then(r => r.json()).then(setProductConfigs);
+      }
+    } catch (err) {
+      console.error(err);
+      showNotification("error", "Nepavyko sukurti taisyklės.");
+    }
+  };
 
   const showNotification = (type: "success" | "error" | "info", message: string) => {
     setGlobalNotify({ type, message });
@@ -426,13 +587,284 @@ export default function App() {
       order.customer_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.order_items.some(i => i.product_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
       order.order_items.some(i => i.sku.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesFilter && matchesSearch;
+    const matchesStation = adminStationFilter === "ALL" || order.order_items.some(i => i.station_id === adminStationFilter);
+    return matchesFilter && matchesSearch && matchesStation;
   });
 
   // Calculate stats
   const pendingArtworkCount = orders.filter(o => o.status === "PENDING_ARTWORK").length;
   const readyProductionCount = orders.filter(o => o.status === "READY_FOR_PRODUCTION").length;
   const criticalStockCount = inventory.filter(i => i.quantity_remaining < i.critical_threshold).length;
+
+  if (userRole === null) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans relative overflow-hidden">
+        {/* Decorative background gradients */}
+        <div className="absolute top-0 -left-4 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
+        <div className="absolute -bottom-8 right-20 w-96 h-96 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
+        
+        <div className="w-full max-w-md p-8 bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl relative z-10 space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-500/30">
+              <Layers className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white mt-4">Printflow ERP Portalas</h1>
+            <p className="text-slate-400 text-xs">Pasirinkite prisijungimo būdą ir pradėkite darbą</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-400 block mb-1.5">Naudotojo rolė</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setSelectedRole("ADMIN"); }}
+                  className={`p-3.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-2 transition-all ${
+                    selectedRole === "ADMIN" 
+                      ? "border-indigo-500 bg-indigo-500/10 text-white" 
+                      : "border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400"
+                  }`}
+                >
+                  <TrendingUp className="w-5 h-5" />
+                  Administratorius
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSelectedRole("WORKER"); }}
+                  className={`p-3.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-2 transition-all ${
+                    selectedRole === "WORKER" 
+                      ? "border-indigo-500 bg-indigo-500/10 text-white" 
+                      : "border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400"
+                  }`}
+                >
+                  <QrCode className="w-5 h-5" />
+                  Darbuotojas
+                </button>
+              </div>
+            </div>
+
+            {selectedRole === "WORKER" && (
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400 block mb-1.5">Gamybos stotelė</label>
+                <select
+                  value={tempStationId}
+                  onChange={(e) => {
+                    setTempStationId(e.target.value);
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">Pasirinkite stotelę...</option>
+                  {stationsList.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleLogin}
+              disabled={selectedRole === "WORKER" && !tempStationId}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs py-3.5 rounded-xl transition-all shadow-lg shadow-indigo-600/30 cursor-pointer"
+            >
+              Prisijungti prie sistemos
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (userRole === "WORKER") {
+    return (
+      <div className="h-screen w-screen overflow-hidden flex bg-slate-50 font-sans selection:bg-indigo-500 selection:text-white">
+        {/* GLOBAL TOP STATUS NOTIFICATION */}
+        {globalNotify && (
+          <div className={`fixed top-4 right-4 z-50 p-3.5 rounded-lg shadow-xl border text-xs max-w-sm flex items-start gap-2.5 transition-all animate-bounce bg-white text-slate-800`}>
+            {globalNotify.type === "success" ? (
+              <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+            )}
+            <div>
+              <p className="font-bold">{globalNotify.type === "success" ? "Atlikta sėkmingai" : "Sistemos klaida"}</p>
+              <p className="mt-0.5 text-[10px] leading-normal opacity-90">{globalNotify.message}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Minimalist Sidebar */}
+        <aside className="w-64 bg-[#0f172a] text-slate-300 flex flex-col shrink-0 border-r border-slate-800">
+          <div className="p-4 flex items-center gap-3 border-b border-slate-800 shrink-0">
+            <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center font-bold text-white shadow-inner">
+              <QrCode className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-white font-black leading-none text-sm tracking-tight">Printflow</span>
+              <span className="text-[10px] opacity-60 mt-1 uppercase tracking-wider">Gamybos stotelė</span>
+            </div>
+          </div>
+
+          <div className="flex-1 p-4 space-y-4">
+            <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-1.5">
+              <p className="text-[10px] uppercase font-bold text-slate-500">Pasirinkta stotelė</p>
+              <p className="text-xs text-white font-bold">{selectedStationName}</p>
+              <p className="text-[10px] text-slate-400">Aktyvių užsakymų stotelėje: {workerItems.length}</p>
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-slate-800">
+            <button
+              onClick={handleLogout}
+              className="w-full bg-slate-800 hover:bg-slate-700 hover:text-white text-slate-300 font-semibold text-xs py-2.5 rounded-lg transition-colors cursor-pointer"
+            >
+              Atsijungti
+            </button>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden text-slate-800">
+          <header className="h-16 border-b border-slate-200 bg-white flex items-center justify-between px-6 shrink-0">
+            <div>
+              <h1 className="text-sm font-bold text-slate-900">{selectedStationName} gamybos eilė</h1>
+              <p className="text-[10px] text-slate-500 mt-0.5">Nuskaitykite QR kodus arba keiskite būsenas</p>
+            </div>
+            <button
+              onClick={() => fetchWorkerItems(selectedStationId!)}
+              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 text-[10px] font-bold"
+            >
+              <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
+              Atnaujinti
+            </button>
+          </header>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Quick QR barcode simulator */}
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+              <h2 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                <QrCode className="w-4 h-4 text-indigo-600" />
+                QR / Barkodų skaitytuvas gamyboje
+              </h2>
+              <p className="text-[10px] text-slate-500">
+                Įveskite arba nuskenuokite prekės ID (pvz., gautas iš užsakymo prekės ID), kad nurašytumėte žaliavas ir užbaigtumėte gamybą.
+              </p>
+              <div className="flex gap-2.5">
+                <input
+                  type="text"
+                  placeholder="Įveskite prekės ID (pvz., item-1)"
+                  value={scannedCode}
+                  onChange={(e) => setScannedCode(e.target.value)}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800"
+                />
+                <button
+                  onClick={handleWorkerQRScan}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  Nuskaityti QR
+                </button>
+              </div>
+            </div>
+
+            {/* List and inventory split */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Queue */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
+                    <h3 className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Užsakymų prekės gamybai</h3>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+                    {workerItems.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-xs">
+                        Šiuo metu stotelėje nėra laukiančių užsakymų.
+                      </div>
+                    ) : (
+                      workerItems.map((item) => (
+                        <div key={item.id} className="p-4 flex items-start justify-between hover:bg-slate-50/50 transition-colors">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-slate-900">{item.orders?.order_number}</span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                item.status === "PENDING_ARTWORK" 
+                                  ? "bg-amber-100 text-amber-800"
+                                  : item.status === "READY_FOR_PRODUCTION"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-purple-100 text-purple-800"
+                              }`}>
+                                {item.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-700 font-semibold">{item.quantity}x {item.product_name}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">SKU: {item.sku} | ID: {item.id}</p>
+                            {item.artwork_file_url && (
+                              <a
+                                href={item.artwork_file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] text-indigo-600 font-bold underline mt-1"
+                              >
+                                <Printer className="w-3 h-3" /> Spaudos failas (PDF)
+                              </a>
+                            )}
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            {item.status === "PENDING_ARTWORK" && (
+                              <button
+                                onClick={() => handleUpdateItemStatus(item.id, "READY_FOR_PRODUCTION")}
+                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded transition-colors cursor-pointer"
+                              >
+                                Patvirtinti maketą
+                              </button>
+                            )}
+                            {item.status === "READY_FOR_PRODUCTION" && (
+                              <button
+                                onClick={() => handleUpdateItemStatus(item.id, "PRINTED_AND_PACKED")}
+                                className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded transition-colors cursor-pointer"
+                              >
+                                Atspausdinta
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Station-specific Stock */}
+              <div className="space-y-4">
+                <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Sandėlio likučiai</h3>
+                  <div className="space-y-3">
+                    {inventory.map((mat) => (
+                      <div key={mat.id} className="p-3 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-slate-700">{mat.material_name}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">SKU: {mat.sku}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-slate-900">
+                            {parseFloat(mat.quantity_remaining.toString()).toFixed(1)} {mat.unit}
+                          </p>
+                          {mat.quantity_remaining < mat.critical_threshold && (
+                            <span className="text-[8px] font-black uppercase text-rose-600 bg-rose-50 px-1 py-0.5 rounded">Reikia papildyti</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-screen overflow-hidden flex bg-slate-50 font-sans selection:bg-indigo-500 selection:text-white">
@@ -542,24 +974,36 @@ export default function App() {
             <span className="ml-auto bg-purple-600/80 text-white font-mono px-1.5 py-0.5 rounded text-[9px]">{emailLogs.length}</span>
           </button>
 
+          <button
+            onClick={() => setActiveTab("config")}
+            className={`flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-md transition-all cursor-pointer w-full text-left ${
+              activeTab === "config"
+                ? "bg-slate-800 text-white font-bold"
+                : "hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Database className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>SaaS & Stotelės</span>
+          </button>
+
           <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2 px-2">Sistemos būsena</div>
           <div className="px-3 py-1 flex items-center justify-between text-[11px] text-slate-400">
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Shopify API
             </span>
-            <span className="opacity-50">Stable</span>
+            <span className="opacity-55">Stable</span>
           </div>
           <div className="px-3 py-1 flex items-center justify-between text-[11px] text-slate-400">
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> DB Actions
             </span>
-            <span className="opacity-50">Active</span>
+            <span className="opacity-55">Active</span>
           </div>
           <div className="px-3 py-1 flex items-center justify-between text-[11px] text-slate-400">
             <span className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></span> Resend API
             </span>
-            <span className="opacity-50">Online</span>
+            <span className="opacity-55">Online</span>
           </div>
         </nav>
 
@@ -574,9 +1018,17 @@ export default function App() {
               <div className="bg-indigo-500 h-1 rounded-full w-[44%]"></div>
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-300">
-            <p className="font-semibold truncate text-slate-200">lukas.ku1598@gmail.com</p>
-            <p className="opacity-55 text-[9px] mt-0.5">Rolė: ERP Administratorius</p>
+          <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-300 flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="font-semibold truncate text-slate-200">lukas.ku1598@gmail.com</p>
+              <p className="opacity-55 text-[9px] mt-0.5">Rolė: ERP Admin</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-[9px] font-bold bg-slate-800 hover:bg-slate-700 hover:text-white px-2 py-1 rounded text-slate-400 cursor-pointer shrink-0 ml-2"
+            >
+              Išeiti
+            </button>
           </div>
         </div>
       </aside>
@@ -701,6 +1153,20 @@ export default function App() {
                             {f.label}
                           </button>
                         ))}
+                      </div>
+
+                      <div className="flex items-center gap-1 bg-white border border-slate-200 rounded px-2 py-0.5 mr-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Stotelė:</span>
+                        <select
+                          value={adminStationFilter}
+                          onChange={(e) => setAdminStationFilter(e.target.value)}
+                          className="bg-transparent border-none text-[10px] text-slate-700 font-bold focus:outline-none cursor-pointer"
+                        >
+                          <option value="ALL">Visos</option>
+                          {stationsList.map((s) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div className="relative">
@@ -1510,6 +1976,162 @@ Viso apmokėta: ${order.total_price.toFixed(2)} EUR
                   Nėra užsakymų su statusu "Paruošta spaudai". Pirmiausia sugeneruokite spaudos failą kuriam nors užsakymui!
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODULE 4.5: SAAS CONFIGURATION TAB */}
+      {activeTab === "config" && (
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50 min-h-screen text-slate-800">
+          <div className="flex justify-between items-center border-b border-slate-200 pb-5">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900">SaaS & Stotelių valdymas</h2>
+              <p className="text-xs text-slate-500 mt-1">Konfigūruokite gamybos stoteles ir automatines užsakymų nukreipimo taisykles pagal prekių SKU.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left: Stations list & creation form */}
+            <div className="space-y-6">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Nauja Gamybos Stotelė</h3>
+                <form onSubmit={handleAddStation} className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Stotelės pavadinimas</label>
+                    <input
+                      type="text"
+                      placeholder="pvz., Drobių stotelė"
+                      value={newStationName}
+                      onChange={(e) => setNewStationName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Kodas (unikali žymė)</label>
+                    <input
+                      type="text"
+                      placeholder="pvz., CANVAS"
+                      value={newStationCode}
+                      onChange={(e) => setNewStationCode(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Aprašymas</label>
+                    <textarea
+                      placeholder="Stotelės paskirties ar įrenginių aprašymas..."
+                      value={newStationDesc}
+                      onChange={(e) => setNewStationDesc(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 h-20 resize-none"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded transition-all cursor-pointer"
+                  >
+                    Sukurti stotelę
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Aktyvios Gamybos Stotelės</h3>
+                <div className="divide-y divide-slate-100">
+                  {stationsList.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-2">Nėra sukurtų stotelių.</p>
+                  ) : (
+                    stationsList.map((s) => (
+                      <div key={s.id} className="py-3 flex justify-between items-start">
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{s.name} <span className="bg-slate-100 text-slate-700 font-mono text-[9px] px-1 py-0.2 rounded ml-1.5">{s.code}</span></p>
+                          <p className="text-[10px] text-slate-500 mt-1">{s.description || "Nėra aprašymo."}</p>
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono">ID: {s.id.substring(0, 8)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Product configs list & creation form */}
+            <div className="space-y-6">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Nauja maršrutizavimo taisyklė</h3>
+                <form onSubmit={handleAddConfig} className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Taisyklės pavadinimas</label>
+                    <input
+                      type="text"
+                      placeholder="pvz., Standartiniai plakatai"
+                      value={newConfigName}
+                      onChange={(e) => setNewConfigName(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">SKU šablonas (wildcard `*` palaikymas)</label>
+                    <input
+                      type="text"
+                      placeholder="pvz., POSTER-*"
+                      value={newConfigSku}
+                      onChange={(e) => setNewConfigSku(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Priskirta gamybos stotelė</label>
+                    <select
+                      value={newConfigStationId}
+                      onChange={(e) => setNewConfigStationId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    >
+                      <option value="">Pasirinkite stotelę...</option>
+                      {stationsList.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Spaudos failų generavimo tipas</label>
+                    <select
+                      value={newConfigArtType}
+                      onChange={(e) => setNewConfigArtType(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                    >
+                      <option value="standard_canvas">Standard Canvas (Foto drobės maketas)</option>
+                      <option value="high_res_poster">High-Res Poster (Satininis plakatas)</option>
+                      <option value="custom_sticker">Custom Sticker (Pjaustomi lipdukai)</option>
+                    </select>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded transition-all cursor-pointer"
+                  >
+                    Sukurti taisyklę
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Aktyvios nukreipimo taisyklės</h3>
+                <div className="divide-y divide-slate-100">
+                  {productConfigs.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic py-2">Nėra sukurtų taisyklių.</p>
+                  ) : (
+                    productConfigs.map((c) => (
+                      <div key={c.id} className="py-3 flex justify-between items-start">
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{c.name} <span className="bg-indigo-50 text-indigo-700 font-mono text-[9px] px-1 py-0.2 rounded ml-1.5">{c.sku_pattern}</span></p>
+                          <p className="text-[10px] text-slate-500 mt-1">Stotelė: <span className="font-semibold text-slate-700">{c.stations?.name || "Nepriskirta"}</span> | Generavimas: <span className="font-mono">{c.artwork_generator_type}</span></p>
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono">ID: {c.id.substring(0, 8)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

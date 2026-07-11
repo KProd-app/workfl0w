@@ -7,6 +7,26 @@
 -- Enable UUID extension if not enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- 0.1. STATIONS TABLE
+CREATE TABLE IF NOT EXISTS stations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  code VARCHAR(50) UNIQUE NOT NULL, -- e.g., 'CANVAS', 'POSTER', 'STICKER'
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 0.2. PRODUCT ROUTING RULES TABLE
+CREATE TABLE IF NOT EXISTS product_configs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  sku_pattern VARCHAR(100) UNIQUE NOT NULL, -- e.g., 'CANVAS-*', 'POSTER-*'
+  station_id UUID REFERENCES stations(id) ON DELETE CASCADE,
+  artwork_generator_type VARCHAR(100) NOT NULL, -- e.g., 'standard_canvas', 'high_res_poster'
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+
 -- Create order statuses type
 CREATE TYPE order_status AS ENUM (
   'PENDING_ARTWORK',
@@ -50,6 +70,8 @@ CREATE TABLE IF NOT EXISTS order_items (
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   price DECIMAL(10, 2) NOT NULL,
   artwork_file_url TEXT, -- Path to generated 300DPI production print file in Supabase Storage
+  station_id UUID REFERENCES stations(id) ON DELETE SET NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'PENDING_ARTWORK',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

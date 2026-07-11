@@ -187,16 +187,35 @@ const app = express();
 
       if (insertOrderError) throw insertOrderError;
 
+      // Fetch product configs to route items
+      const { data: configs } = await supabase.from("product_configs").select("*");
+
       // Insert line items
-      const itemsToInsert = lineItems.map((item: any) => ({
-        order_id: insertedOrder.id,
-        shopify_line_item_id: item.shopify_line_item_id,
-        product_name: item.product_name,
-        sku: item.sku,
-        quantity: item.quantity,
-        price: item.price,
-        artwork_file_url: item.artwork_file_url
-      }));
+      const itemsToInsert = lineItems.map((item: any) => {
+        let matchedStationId: string | null = null;
+        if (configs) {
+          for (const config of configs) {
+            // Check wildcard matching (e.g. CANVAS-* matching CANVAS-6090-PREM)
+            const pattern = config.sku_pattern.replace(/\*/g, ".*");
+            const regex = new RegExp(`^${pattern}$`, "i");
+            if (regex.test(item.sku)) {
+              matchedStationId = config.station_id;
+              break;
+            }
+          }
+        }
+        return {
+          order_id: insertedOrder.id,
+          shopify_line_item_id: item.shopify_line_item_id,
+          product_name: item.product_name,
+          sku: item.sku,
+          quantity: item.quantity,
+          price: item.price,
+          artwork_file_url: item.artwork_file_url,
+          station_id: matchedStationId,
+          status: "PENDING_ARTWORK"
+        };
+      });
 
       const { error: insertItemsError } = await supabase
         .from("order_items")
@@ -451,6 +470,200 @@ const app = express();
     }
   });
 
+  // Helper functions for Multi-Station status tracking
+  async function updateOrderStatusFromItems(orderId: string) {
+    const { data: items, error } = await supabase
+      .from("order_items")
+      .select("status")
+      .eq("order_id", orderId);
+
+    if (error || !items || items.length === 0) return;
+
+    const statuses = items.map(i => i.status);
+    let newStatus: string = "PENDING_ARTWORK";
+
+    if (statuses.every(s => s === "FULFILLED")) {
+      newStatus = "FULFILLED";
+    } else if (statuses.every(s => s === "PRINTED_AND_PACKED" || s === "FULFILLED")) {
+      newStatus = "PRINTED_AND_PACKED";
+    } else if (statuses.every(s => s === "READY_FOR_PRODUCTION" || s === "PRINTED_AND_PACKED" || s === "FULFILLED")) {
+      newStatus = "READY_FOR_PRODUCTION";
+    }
+
+    await supabase
+      .from("orders")
+      .update({ status: newStatus })
+      .eq("id", orderId);
+  }
+
+  async function deductInventoryForItem(item: any) {
+    const { data: inventory, error: invError } = await supabase
+      .from("inventory")
+      .select("*");
+
+    if (invError || !inventory) return;
+
+    const usageLogs: any[] = [];
+
+    for (const material of inventory) {
+      let deductAmount = 0;
+      
+      if (material.sku === "CANVAS-MAT" && item.sku.includes("CANVAS")) {
+        deductAmount = 2.4 * item.quantity;
+      } else if (material.sku === "POSTER-MAT" && item.sku.includes("POSTER")) {
+        deductAmount = 1.1 * item.quantity;
+      } else if (material.sku === "INK-CMYK") {
+        deductAmount = 45 * item.quantity;
+      } else if (material.sku === "TUBE-PC") {
+        deductAmount = 1 * item.quantity;
+      }
+
+      if (deductAmount > 0) {
+        const currentQty = parseFloat(material.quantity_remaining);
+        const newQty = Math.max(0, currentQty - deductAmount);
+
+        await supabase
+          .from("inventory")
+          .update({ quantity_remaining: newQty })
+          .eq("id", material.id);
+
+        usageLogs.push({
+          order_id: item.order_id,
+          material_id: material.id,
+          quantity_used: deductAmount
+        });
+      }
+    }
+
+    if (usageLogs.length > 0) {
+      await supabase.from("raw_materials_usage_log").insert(usageLogs);
+    }
+  }
+
+  // ============================================================================
+  // MODULE 4.5: SAAS MULTI-STATION & PRODUCTS CONFIGURATION
+  // ============================================================================
+  app.get("/api/stations", async (req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from("stations")
+        .select("*")
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      return res.json(data || []);
+    } catch (err: any) {
+      console.error("Failed to fetch stations:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/stations", async (req, res) => {
+    const { name, code, description } = req.body;
+    try {
+      const { data, error } = await supabase
+        .from("stations")
+        .insert({ name, code, description })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.json(data);
+    } catch (err: any) {
+      console.error("Failed to create station:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/products/configs", async (req, res) => {
+    try {
+      const { data, error } = await supabase
+        .from("product_configs")
+        .select("*, stations(name)");
+
+      if (error) throw error;
+      return res.json(data || []);
+    } catch (err: any) {
+      console.error("Failed to fetch product configs:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/products/configs", async (req, res) => {
+    const { name, sku_pattern, station_id, artwork_generator_type } = req.body;
+    try {
+      const { data, error } = await supabase
+        .from("product_configs")
+        .insert({ name, sku_pattern, station_id, artwork_generator_type })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return res.json(data);
+    } catch (err: any) {
+      console.error("Failed to create product config:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/stations/:id/items", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const { data, error } = await supabase
+        .from("order_items")
+        .select("*, orders(order_number, customer_name, customer_email, created_at)")
+        .eq("station_id", id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return res.json(data || []);
+    } catch (err: any) {
+      console.error("Failed to fetch station items:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/order-items/:id/status", async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    try {
+      const { data: item, error: fetchError } = await supabase
+        .from("order_items")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (fetchError || !item) {
+        return res.status(404).json({ error: "Order item not found" });
+      }
+
+      const oldStatus = item.status;
+
+      const { data: updatedItem, error: updateError } = await supabase
+        .from("order_items")
+        .update({ status })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // Deduct inventory when status becomes PRINTED_AND_PACKED
+      if (status === "PRINTED_AND_PACKED" && oldStatus !== "PRINTED_AND_PACKED") {
+        await deductInventoryForItem(item);
+      }
+
+      // Update parent order status based on item statuses
+      await updateOrderStatusFromItems(item.order_id);
+
+      return res.json({ success: true, item: updatedItem });
+    } catch (err: any) {
+      console.error("Failed to update item status:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+
   // ============================================================================
   // MODULE 5: FINANSŲ IR SAVIKAINOS ANALITIKA (PROFITABILITY ENGINE)
   // Monthly reports aggregated for bookkeeping
@@ -671,6 +884,39 @@ const app = express();
       await supabase.from("orders").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("inventory").delete().neq("id", "00000000-0000-0000-0000-000000000000");
       await supabase.from("invoice_sequences").delete().neq("year", 0);
+      await supabase.from("product_configs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("stations").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+
+      // Seed Stations
+      const defaultStations = [
+        { name: "Drobių stotelė", code: "CANVAS", description: "Drobių gamybos ir porėminimo stotelė" },
+        { name: "Plakatų stotelė", code: "POSTER", description: "Didelio formato plakatų spaudos stotelė" },
+        { name: "Lipdukų stotelė", code: "STICKER", description: "Lipdukų pjaustymo ir pakavimo stotelė" }
+      ];
+
+      const { data: stations, error: stationsError } = await supabase
+        .from("stations")
+        .insert(defaultStations)
+        .select();
+
+      if (stationsError || !stations) throw stationsError || new Error("Failed to seed stations");
+
+      const canvasStation = stations.find(s => s.code === "CANVAS");
+      const posterStation = stations.find(s => s.code === "POSTER");
+      const stickerStation = stations.find(s => s.code === "STICKER");
+
+      // Seed Product Configurations
+      const defaultConfigs = [
+        { name: "Premium drobės", sku_pattern: "CANVAS-*", station_id: canvasStation?.id, artwork_generator_type: "standard_canvas" },
+        { name: "Plakatai", sku_pattern: "POSTER-*", station_id: posterStation?.id, artwork_generator_type: "high_res_poster" },
+        { name: "Lipdukai", sku_pattern: "STICKER-*", station_id: stickerStation?.id, artwork_generator_type: "custom_sticker" }
+      ];
+
+      const { error: configsError } = await supabase
+        .from("product_configs")
+        .insert(defaultConfigs);
+
+      if (configsError) throw configsError;
 
       // Seed Inventory
       const defaultInventory = [
@@ -722,6 +968,8 @@ const app = express();
         quantity: 1,
         price: 189.50,
         artwork_file_url: "https://supabase-storage.printflow.lt/documents/artwork_1024.pdf",
+        station_id: canvasStation?.id,
+        status: "READY_FOR_PRODUCTION",
         created_at: createdDate.toISOString()
       };
 
@@ -759,6 +1007,8 @@ const app = express();
         quantity: 2,
         price: 23.70,
         artwork_file_url: "",
+        station_id: posterStation?.id,
+        status: "PENDING_ARTWORK",
         created_at: new Date().toISOString()
       };
 
@@ -796,6 +1046,8 @@ const app = express();
         quantity: 1,
         price: 312.00,
         artwork_file_url: "https://supabase-storage.printflow.lt/documents/artwork_1026.pdf",
+        station_id: stickerStation?.id,
+        status: "PRINTED_AND_PACKED",
         created_at: createdDate.toISOString()
       };
 
