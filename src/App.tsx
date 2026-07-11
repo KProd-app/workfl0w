@@ -104,6 +104,7 @@ interface MonthlySummary {
 export default function App() {
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<"production" | "webhook" | "inventory" | "finance" | "emails" | "config">("production");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // State managers
   const [orders, setOrders] = useState<Order[]>([]);
@@ -792,70 +793,117 @@ export default function App() {
         )}
 
         {/* Minimalist Sidebar */}
-        <aside className="w-64 bg-[#090d16] text-slate-300 flex flex-col shrink-0 border-r border-slate-850/80 backdrop-blur-md relative z-20">
+        <aside className={`bg-[#090d16] text-slate-300 flex flex-col shrink-0 border-r border-slate-850/80 backdrop-blur-md relative z-20 transition-all duration-300 ease-in-out ${
+          isSidebarCollapsed ? "w-20" : "w-64"
+        }`}>
           {/* Top glow */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/55 to-transparent"></div>
 
-          <div className="p-4.5 flex items-center gap-3 border-b border-slate-900 shrink-0">
-            <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/15">
-              <QrCode className="w-5 h-5 text-white" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-white font-extrabold tracking-tight text-sm">Printflow</span>
-              <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">Darbo stotis</span>
+          <div className={`p-4.5 flex items-center justify-between border-b border-slate-900 shrink-0 ${isSidebarCollapsed ? "justify-center" : ""}`}>
+            <div className="flex items-center gap-3">
+              <div 
+                className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/15 cursor-pointer"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                title={isSidebarCollapsed ? "Išskleisti meniu" : "Suskleisti meniu"}
+              >
+                <QrCode className="w-5 h-5 text-white" />
+              </div>
+              {!isSidebarCollapsed && (
+                <div className="flex flex-col animate-fadeIn">
+                  <span className="text-white font-extrabold tracking-tight text-sm">Printflow</span>
+                  <span className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">Darbo stotis</span>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="flex-1 p-4 space-y-4">
-            <div className="bg-slate-950/40 p-4 rounded-2xl border border-slate-900 space-y-1">
-              <p className="text-[9px] uppercase font-bold text-slate-550 tracking-wider">Pasirinkta stotelė</p>
-              <p className="text-xs text-white font-extrabold">{selectedStationName}</p>
-              <p className="text-[10px] text-slate-400 font-mono mt-1">Laukia gamybos: {workerItems.length} vnt.</p>
-            </div>
+            {!isSidebarCollapsed ? (
+              <div className="bg-slate-955/40 bg-slate-950/40 p-4 rounded-2xl border border-slate-900 space-y-1 animate-fadeIn">
+                <p className="text-[9px] uppercase font-bold text-slate-550 tracking-wider">Pasirinkta stotelė</p>
+                <p className="text-xs text-white font-extrabold">{selectedStationName}</p>
+                <p className="text-[10px] text-slate-400 font-mono mt-1">Laukia gamybos: {workerItems.length} vnt.</p>
+              </div>
+            ) : (
+              <div className="text-center bg-slate-950/40 py-2 rounded-xl border border-slate-900 font-bold text-[10px] text-indigo-400">
+                {workerItems.length}
+              </div>
+            )}
 
             <nav className="space-y-1.5">
               <button
                 onClick={() => setActiveWorkerTab("production")}
-                className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+                className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+                  isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+                } ${
                   activeWorkerTab === "production"
                     ? "bg-slate-900 text-white font-bold shadow-sm"
                     : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
                 }`}
+                title="Gamybos eilė"
               >
                 {activeWorkerTab === "production" && (
                   <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-indigo-500 rounded-r-full"></span>
                 )}
                 <Layers className={`w-4 h-4 shrink-0 transition-colors ${activeWorkerTab === "production" ? "text-indigo-400" : "text-slate-500 group-hover:text-slate-400"}`} />
-                <span>Gamybos eilė</span>
+                {!isSidebarCollapsed && (
+                  <span className="animate-fadeIn">Gamybos eilė</span>
+                )}
               </button>
 
               <button
                 onClick={() => setActiveWorkerTab("shipping")}
-                className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+                className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+                  isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+                } ${
                   activeWorkerTab === "shipping"
                     ? "bg-slate-900 text-white font-bold shadow-sm"
                     : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
                 }`}
+                title="Siuntimo langas"
               >
                 {activeWorkerTab === "shipping" && (
                   <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-emerald-500 rounded-r-full"></span>
                 )}
                 <Truck className={`w-4 h-4 shrink-0 transition-colors ${activeWorkerTab === "shipping" ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-400"}`} />
-                <span>Siuntimo langas</span>
-                <span className="ml-auto bg-emerald-600/25 text-emerald-400 border border-emerald-500/20 font-mono font-bold px-1.5 py-0.5 rounded-lg text-[9px]">
-                  {orders.filter(o => o.status === "PRINTED_AND_PACKED").length}
-                </span>
+                {!isSidebarCollapsed && (
+                  <div className="flex items-center justify-between flex-1 animate-fadeIn">
+                    <span>Siuntimo langas</span>
+                    <span className="bg-emerald-600/25 text-emerald-400 border border-emerald-500/20 font-mono font-bold px-1.5 py-0.5 rounded-lg text-[9px]">
+                      {orders.filter(o => o.status === "PRINTED_AND_PACKED").length}
+                    </span>
+                  </div>
+                )}
               </button>
             </nav>
           </div>
 
-          <div className="p-4 border-t border-slate-900">
-            <button
-              onClick={handleLogout}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs py-2.5 rounded-xl border border-slate-850 cursor-pointer transition-colors"
-            >
-              Atsijungti
-            </button>
+          <div className="p-4 border-t border-slate-900 flex flex-col gap-3 bg-[#05080f]">
+            {!isSidebarCollapsed ? (
+              <button
+                onClick={handleLogout}
+                className="w-full bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-xs py-2.5 rounded-xl border border-slate-855 cursor-pointer transition-colors animate-fadeIn"
+              >
+                Atsijungti
+              </button>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <button
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  className="text-slate-500 hover:text-white p-1 hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+                  title="Išskleisti meniu"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 cursor-pointer transition-colors"
+                  title="Atsijungti"
+                >
+                  <ChevronRight className="w-4 h-4 rotate-180" />
+                </button>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -1362,170 +1410,239 @@ export default function App() {
       )}
 
       {/* DARK SIDEBAR (LEFT) */}
-      <aside className="w-64 bg-[#090d16] text-slate-300 flex flex-col shrink-0 border-r border-slate-850/80 backdrop-blur-md relative z-20">
+      <aside className={`bg-[#090d16] text-slate-300 flex flex-col shrink-0 border-r border-slate-850/80 backdrop-blur-md relative z-20 transition-all duration-300 ease-in-out ${
+        isSidebarCollapsed ? "w-20" : "w-64"
+      }`}>
         {/* Glow effect at top of sidebar */}
         <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/55 to-transparent"></div>
 
         {/* Brand Header */}
-        <div className="p-4.5 flex items-center gap-3 border-b border-slate-900 shrink-0">
-          <div className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/15">
-            <Layers className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="text-white font-extrabold tracking-tight text-sm">Printflow ERP</span>
-              <span className="text-[8px] font-extrabold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1 py-0.2 rounded uppercase tracking-wider">M-SaaS</span>
+        <div className={`p-4.5 flex items-center justify-between border-b border-slate-900 shrink-0 ${isSidebarCollapsed ? "justify-center" : ""}`}>
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-9 h-9 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/15 cursor-pointer"
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              title={isSidebarCollapsed ? "Išskleisti meniu" : "Suskleisti meniu"}
+            >
+              <Layers className="w-5 h-5 text-white" />
             </div>
-            <span className="text-[9px] text-slate-500 mt-0.5">Gamybos centras • v1.5</span>
+            {!isSidebarCollapsed && (
+              <div className="flex flex-col animate-fadeIn">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white font-extrabold tracking-tight text-sm">Printflow ERP</span>
+                  <span className="text-[8px] font-extrabold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1 py-0.2 rounded uppercase tracking-wider">M-SaaS</span>
+                </div>
+                <span className="text-[9px] text-slate-500 mt-0.5">Gamybos centras • v1.5</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Sidebar Nav items */}
         <nav className="flex-1 p-3.5 space-y-1.5 overflow-y-auto">
-          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">Valdymas</div>
+          {!isSidebarCollapsed && (
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2 animate-fadeIn">Valdymas</div>
+          )}
           
           <button
             onClick={() => setActiveTab("production")}
-            className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+            className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+              isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+            } ${
               activeTab === "production"
                 ? "bg-slate-900 text-white font-bold shadow-sm"
                 : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
             }`}
+            title="Gamyba & Užsakymai"
           >
             {activeTab === "production" && (
               <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-indigo-500 rounded-r-full"></span>
             )}
             <Layers className={`w-4 h-4 shrink-0 transition-colors ${activeTab === "production" ? "text-indigo-400" : "text-slate-500 group-hover:text-slate-400"}`} />
-            <span>Gamyba & Užsakymai</span>
-            <span className="ml-auto bg-indigo-600/25 text-indigo-400 border border-indigo-500/20 font-mono font-bold px-1.5 py-0.5 rounded-lg text-[9px]">{orders.length}</span>
+            {!isSidebarCollapsed && (
+              <div className="flex items-center justify-between flex-1 animate-fadeIn">
+                <span>Gamyba & Užsakymai</span>
+                <span className="bg-indigo-600/25 text-indigo-400 border border-indigo-500/20 font-mono font-bold px-1.5 py-0.5 rounded-lg text-[9px]">{orders.length}</span>
+              </div>
+            )}
           </button>
 
           <button
             onClick={() => setActiveTab("webhook")}
-            className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+            className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+              isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+            } ${
               activeTab === "webhook"
                 ? "bg-slate-900 text-white font-bold shadow-sm"
                 : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
             }`}
+            title="Shopify Webhook"
           >
             {activeTab === "webhook" && (
               <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-emerald-500 rounded-r-full"></span>
             )}
             <ShoppingBag className={`w-4 h-4 shrink-0 transition-colors ${activeTab === "webhook" ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-400"}`} />
-            <span>Shopify Webhook</span>
-            <span className="ml-auto bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 font-mono px-1.5 py-0.5 rounded-lg text-[9px]">Test</span>
+            {!isSidebarCollapsed && (
+              <div className="flex items-center justify-between flex-1 animate-fadeIn">
+                <span>Shopify Webhook</span>
+                <span className="bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 font-mono px-1.5 py-0.5 rounded-lg text-[9px]">Test</span>
+              </div>
+            )}
           </button>
 
           <button
             onClick={() => setActiveTab("inventory")}
-            className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+            className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+              isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+            } ${
               activeTab === "inventory"
                 ? "bg-slate-900 text-white font-bold shadow-sm"
                 : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
             }`}
+            title="Sandėlio apskaita"
           >
             {activeTab === "inventory" && (
               <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-amber-500 rounded-r-full"></span>
             )}
             <Package className={`w-4 h-4 shrink-0 transition-colors ${activeTab === "inventory" ? "text-amber-400" : "text-slate-500 group-hover:text-slate-400"}`} />
-            <span>Sandėlio apskaita</span>
-            {criticalStockCount > 0 && (
-              <span className="ml-auto bg-rose-500 text-white font-mono px-1.5 py-0.5 rounded-lg text-[9px] animate-pulse">!</span>
+            {!isSidebarCollapsed && (
+              <div className="flex items-center justify-between flex-1 animate-fadeIn">
+                <span>Sandėlio apskaita</span>
+                {criticalStockCount > 0 && (
+                  <span className="bg-rose-500 text-white font-mono px-1.5 py-0.5 rounded-lg text-[9px] animate-pulse">!</span>
+                )}
+              </div>
             )}
           </button>
 
           <button
             onClick={() => setActiveTab("finance")}
-            className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+            className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+              isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+            } ${
               activeTab === "finance"
                 ? "bg-slate-900 text-white font-bold shadow-sm"
                 : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
             }`}
+            title="Finansų ERP & SQL"
           >
             {activeTab === "finance" && (
               <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-blue-500 rounded-r-full"></span>
             )}
             <TrendingUp className={`w-4 h-4 shrink-0 transition-colors ${activeTab === "finance" ? "text-blue-400" : "text-slate-500 group-hover:text-slate-400"}`} />
-            <span>Finansų ERP & SQL</span>
+            {!isSidebarCollapsed && (
+              <span className="animate-fadeIn">Finansų ERP & SQL</span>
+            )}
           </button>
 
           <button
             onClick={() => setActiveTab("emails")}
-            className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+            className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+              isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+            } ${
               activeTab === "emails"
                 ? "bg-slate-900 text-white font-bold shadow-sm"
                 : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
             }`}
+            title="Resend El. paštas"
           >
             {activeTab === "emails" && (
               <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-purple-500 rounded-r-full"></span>
             )}
             <Mail className={`w-4 h-4 shrink-0 transition-colors ${activeTab === "emails" ? "text-purple-400" : "text-slate-500 group-hover:text-slate-400"}`} />
-            <span>Resend El. paštas</span>
-            <span className="ml-auto bg-purple-600/25 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded-lg text-[9px]">{emailLogs.length}</span>
+            {!isSidebarCollapsed && (
+              <div className="flex items-center justify-between flex-1 animate-fadeIn">
+                <span>Resend El. paštas</span>
+                <span className="bg-purple-600/25 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded-lg text-[9px]">{emailLogs.length}</span>
+              </div>
+            )}
           </button>
 
           <button
             onClick={() => setActiveTab("config")}
-            className={`flex items-center gap-3 px-3 py-2.5 text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full text-left group relative ${
+            className={`flex items-center text-xs font-semibold rounded-xl transition-all duration-200 cursor-pointer w-full group relative ${
+              isSidebarCollapsed ? "justify-center py-3" : "gap-3 px-3 py-2.5 text-left"
+            } ${
               activeTab === "config"
                 ? "bg-slate-900 text-white font-bold shadow-sm"
                 : "hover:bg-slate-900/30 text-slate-400 hover:text-slate-200"
             }`}
+            title="SaaS & Stotelės"
           >
             {activeTab === "config" && (
               <span className="absolute left-0 top-2.5 bottom-2.5 w-1 bg-amber-500 rounded-r-full"></span>
             )}
             <Database className={`w-4 h-4 shrink-0 transition-colors ${activeTab === "config" ? "text-amber-550" : "text-slate-500 group-hover:text-slate-400"}`} />
-            <span>SaaS & Stotelės</span>
+            {!isSidebarCollapsed && (
+              <span className="animate-fadeIn">SaaS & Stotelės</span>
+            )}
           </button>
 
-          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-7 mb-3 px-2">Sistemos būsena</div>
+          {!isSidebarCollapsed && (
+            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-7 mb-3 px-2 animate-fadeIn">Sistemos būsena</div>
+          )}
           <div className="space-y-1 bg-slate-950/40 p-2.5 rounded-xl border border-slate-900">
-            <div className="px-2 py-1 flex items-center justify-between text-[10px] text-slate-400">
+            <div className={`px-2 py-1 flex items-center justify-between text-[10px] text-slate-400 ${isSidebarCollapsed ? "justify-center" : ""}`}>
               <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Shopify API
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                {!isSidebarCollapsed && "Shopify API"}
               </span>
-              <span className="opacity-55 font-mono text-[9px]">Stable</span>
+              {!isSidebarCollapsed && <span className="opacity-55 font-mono text-[9px]">Stable</span>}
             </div>
-            <div className="px-2 py-1 flex items-center justify-between text-[10px] text-slate-400">
+            <div className={`px-2 py-1 flex items-center justify-between text-[10px] text-slate-400 ${isSidebarCollapsed ? "justify-center" : ""}`}>
               <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> DB Actions
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                {!isSidebarCollapsed && "DB Actions"}
               </span>
-              <span className="opacity-55 font-mono text-[9px]">Active</span>
-            </div>
-            <div className="px-2 py-1 flex items-center justify-between text-[10px] text-slate-400">
-              <span className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span> Resend API
-              </span>
-              <span className="opacity-55 font-mono text-[9px]">Online</span>
+              {!isSidebarCollapsed && <span className="opacity-55 font-mono text-[9px]">Active</span>}
             </div>
           </div>
         </nav>
 
         {/* Sidebar Footer Usage & Profile */}
-        <div className="p-4 bg-slate-955/80 border-t border-slate-900 shrink-0 flex flex-col gap-3">
-          <div className="text-[10px] text-slate-400">
-            <div className="flex justify-between mb-1.5">
-              <span className="font-semibold">DB Užimtumas</span>
-              <span className="font-mono">44%</span>
+        <div className="p-4 bg-[#05080f] border-t border-slate-900 shrink-0 flex flex-col gap-3">
+          {!isSidebarCollapsed ? (
+            <>
+              <div className="text-[10px] text-slate-400 animate-fadeIn">
+                <div className="flex justify-between mb-1.5">
+                  <span className="font-semibold">DB Užimtumas</span>
+                  <span className="font-mono">44%</span>
+                </div>
+                <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-indigo-500 h-1.5 rounded-full w-[44%] shadow-sm shadow-indigo-500/20"></div>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-slate-900/60 text-[10px] text-slate-350 flex items-center justify-between animate-fadeIn">
+                <div className="min-w-0">
+                  <p className="font-bold truncate text-slate-200">lukas.ku1598@gmail.com</p>
+                  <p className="opacity-55 text-[9px] mt-0.5">ERP Administratorius</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-[9px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-slate-850 cursor-pointer shrink-0 transition-colors"
+                >
+                  Išeiti
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <button
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="text-slate-500 hover:text-white p-1 hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+                title="Išskleisti meniu"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg border border-slate-850 cursor-pointer transition-colors"
+                title="Atsijungti"
+              >
+                <ChevronRight className="w-4 h-4 rotate-180" />
+              </button>
             </div>
-            <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-indigo-500 h-1.5 rounded-full w-[44%] shadow-sm shadow-indigo-500/20"></div>
-            </div>
-          </div>
-          <div className="pt-3 border-t border-slate-900/60 text-[10px] text-slate-300 flex items-center justify-between">
-            <div className="min-w-0">
-              <p className="font-bold truncate text-slate-200">lukas.ku1598@gmail.com</p>
-              <p className="opacity-55 text-[9px] mt-0.5">ERP Administratorius</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="text-[9px] font-bold bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-slate-850 cursor-pointer shrink-0 transition-colors"
-            >
-              Išeiti
-            </button>
-          </div>
+          )}
         </div>
       </aside>
 
