@@ -1,0 +1,6 @@
+{
+  "name": "Printflow ERP",
+  "description": "Gamybos, užsakymų ir finansų valdymo sistema (Order Management, Production Queue & ERP Middleware) su Shopify integracija, sąskaitomis faktūromis bei QR sekimu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
